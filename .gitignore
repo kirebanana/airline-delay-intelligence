@@ -1,0 +1,15 @@
+# Local credentials and secrets
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+
+# Local tooling and OS metadata
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+*.log
+*.swp
+*~
