@@ -1,9 +1,11 @@
 # Airline Delay Intelligence
 
-Project deliverables for Airline Delay Intelligence. **Status: PRD approved;
-technical specification pending.** The [approved PRD](docs/prds/airline-delay-intelligence.md)
-defines product scope and acceptance. No approved technical specification or
-implementation exists yet; architectural choices deferred by the PRD remain open.
+Project deliverables for Airline Delay Intelligence. **Status: PRD and technical
+specification v0.4 approved; ticket review pending; implementation not started.**
+The [approved PRD](docs/prds/airline-delay-intelligence.md) defines product scope and
+acceptance; the [approved specification](docs/specifications/airline-delay-intelligence.md)
+defines architecture, local-first ordering and phase-specific feasibility gates.
+Approval does not authorize implementation, cloud setup or Snowflake activation.
 Prior research is reference material, not additional approved requirements.
 
 ## Planning workflow
@@ -21,12 +23,15 @@ Link issues to approved document revisions and acceptance criteria.
 ## Documentation
 
 - [Airline Delay Intelligence PRD](docs/prds/airline-delay-intelligence.md): approved 2026-10-26.
-- `docs/specifications/`: implementation specifications.
+- [Airline Delay Intelligence technical specification](docs/specifications/airline-delay-intelligence.md): v0.4, approved 2026-10-26.
 - `docs/adrs/`: approved architecture decision records.
 
-Specification and ADR directories remain placeholders until reviewed decisions
-exist. Later, source code and tests will be added according to the approved
-specification; no implementation structure is prescribed yet.
+ADRs may be added when separate decision records are needed. Source code and tests
+will follow reviewed tickets and approved implementation batches. The first path is
+local Python/dbt Core, then separately authorized Snowflake/internal-stage work,
+the first official BTS month and initial local Streamlit. AWS account qualification
+is deferred until the first required AWS integration approaches; final Terraform,
+S3/external-stage, ECS/Step Functions and CI deliverables remain required.
 
 ## Repository boundary
 
