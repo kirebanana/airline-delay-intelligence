@@ -1,9 +1,10 @@
 # Airline Delay Intelligence
 
-Project deliverables for Airline Delay Intelligence. **Status: pre-PRD.** No
-approved product requirements, technical specification, implementation, or
-architecture decisions exist yet. The technology stack and dataset scope remain
-open; prior research is reference material, not finalized requirements.
+Project deliverables for Airline Delay Intelligence. **Status: PRD approved;
+technical specification pending.** The [approved PRD](docs/prds/airline-delay-intelligence.md)
+defines product scope and acceptance. No approved technical specification or
+implementation exists yet; architectural choices deferred by the PRD remain open.
+Prior research is reference material, not additional approved requirements.
 
 ## Planning workflow
 
@@ -19,13 +20,13 @@ Link issues to approved document revisions and acceptance criteria.
 
 ## Documentation
 
-- `docs/prds/`: product requirements documents.
+- [Airline Delay Intelligence PRD](docs/prds/airline-delay-intelligence.md): approved 2026-10-26.
 - `docs/specifications/`: implementation specifications.
 - `docs/adrs/`: approved architecture decision records.
 
-These directories are placeholders until reviewed deliverables exist. Later,
-source code and tests will be added according to the approved specification;
-no implementation structure is prescribed yet.
+Specification and ADR directories remain placeholders until reviewed decisions
+exist. Later, source code and tests will be added according to the approved
+specification; no implementation structure is prescribed yet.
 
 ## Repository boundary
 
