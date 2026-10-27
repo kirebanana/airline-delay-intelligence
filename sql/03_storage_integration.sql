@@ -1,5 +1,6 @@
--- Agent attempt denied CREATE INTEGRATION on ACCOUNT. Human administrator runs this.
--- Funding owner-confirmed; Terraform bucket/closed-trust role now deployed in Ohio.
+-- Bootstrap completed by the human owner, 2026-10-27. Reference, NOT a rerun script.
+-- Agent does not have CREATE INTEGRATION on ACCOUNT. Do not recreate this object.
+-- Funding owner-confirmed; Terraform bucket/role deployed in Ohio; exact trust finalized.
 -- These are the actual deployed ARN/location: no substitutions are necessary.
 -- Use the human owner's existing ACCOUNTADMIN session, never an admin workload role.
 -- This binds one exact role/bucket/prefix. Never embed AWS access keys.

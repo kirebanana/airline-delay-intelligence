@@ -3,12 +3,20 @@ mock_provider "aws" {}
 run "unverified_funding_blocks_creation" {
   command         = plan
   expect_failures = [aws_s3_bucket.bts]
+  # Ignore operator auto.tfvars: these are isolated mock scenarios, not live inputs.
+  variables {
+    funding_verified        = false
+    snowflake_principal_arn = null
+    snowflake_external_id   = null
+  }
 }
 
 run "private_minimal_storage_and_closed_initial_trust" {
   command = plan
   variables {
-    funding_verified = true
+    funding_verified        = true
+    snowflake_principal_arn = null
+    snowflake_external_id   = null
   }
   assert {
     condition     = aws_s3_bucket.bts.force_destroy == false && aws_s3_bucket_public_access_block.bts.block_public_policy && aws_s3_bucket_public_access_block.bts.block_public_acls && aws_s3_bucket_public_access_block.bts.ignore_public_acls && aws_s3_bucket_public_access_block.bts.restrict_public_buckets

@@ -29,7 +29,9 @@ Link issues to approved document revisions and acceptance criteria.
 ADRs may be added when separate decision records are needed. The revised path is
 Snowflake safeguards → BTS preparation → private S3/external stage → raw COPY →
 dbt → development Streamlit → safe publication. No internal-stage fallback was built.
-Only local preparation is fully data-validated; cloud ingestion is blocked, not complete.
+January preparation and real S3 → external stage → raw COPY ingestion are now verified:
+599,013 source rows,24,732 DEN departures, exact lineage/fingerprints and replay reuse.
+Tickets01–04 are ready for batch review; ticket05 and later work have not started.
 
 ## Preparation and ingestion
 

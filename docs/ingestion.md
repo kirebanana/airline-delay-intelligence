@@ -3,11 +3,11 @@
 Implementation runbook, 2026-10-27. Scope: authorized tickets 01–04 against approved
 specification baseline `b01f2ad499bc3d4b996f6cc0b9fa2df735aa2abd` and the owner's
 revised data-first order. This is not an amendment to final product requirements.
-**Live ingestion is blocked; the code is not yet Snowflake-qualified.**
+**Tickets 01–04: end-to-end January ingestion verified; ready for batch review.**
 
 Latest deployment verification (2026-10-27): X-Small, suspended, auto-suspend60,
 acceleration=false, statement timeout600 and queue timeout60. AIRLINE_BUDGET is now
-visible: ACCOUNT level, MONTHLY, quota5, used0, notify50%, immediate suspend100%, no
+visible: ACCOUNT level, MONTHLY, quota5, initial used0, notify50%, immediate suspend100%, no
 graceful-suspend trigger. It was not modified or attached to the warehouse. The loader
 preflight passes against the actual monitor output.
 
@@ -16,10 +16,14 @@ and Snowflake400USD/30-day trial. These are owner attestations, not agent billin
 results. Exact credit Applicable Products/tax/shared usage remain unobservable through
 the AWS role; see cost caveats below. Seven Terraform resources are deployed and a
 post-deployment plan shows no drift. Source/prepared/manifest objects are uploaded and
-S3 full-object SHA-256 verified. Strict BTS_CSV_V1 exists; integration creation still
-fails003001/42501 (missing CREATE INTEGRATION on ACCOUNT). **No stage or raw rows yet.**
-Sixteen Python tests, lint/format and three Terraform mock tests pass; real replay,
-failure handling and COPY remain untested on Snowflake.
+S3 full-object SHA-256 verified. The human owner created AIRLINE_BTS_S3 and granted
+integration USAGE. Terraform then applied one reviewed in-place update binding the
+new role to the exact Snowflake-generated IAM user and external ID; no broad trust.
+The service role created BTS_EXTERNAL_STAGE. Actual raw rows: **599,013**, including
+**24,732 DEN**. Repeat execution reuses the verified artifact without COPY or duplicates.
+Sixteen offline tests, four opt-in live tests and three Terraform mock tests pass,
+as do lint/format/validation. Final live Terraform plan reports no drift. Ticket05
+and publication/model/dashboard work were not started.
 
 ## Local preparation (no cloud access)
 
@@ -101,7 +105,11 @@ database AIRLINE_DB and warehouse AIRLINE_DEV_WH. No alternate/admin workload id
    This is the exact owner-run SQL for the observed privilege blocker; use the owner's
    existing ACCOUNTADMIN session, not the service identity. Do not grant CREATE
    INTEGRATION or ACCOUNTADMIN to the workload role. Do not run it until funding and
-   the closed-trust role bootstrap have passed.
+   the closed-trust role bootstrap have passed. This bootstrap is now complete:
+   exact generated values are stored only in ignored, owner-only
+   `infra/ingestion/bootstrap.auto.tfvars` and protected Terraform state/plan files.
+   Existing integration ownership remains ACCOUNTADMIN; stage/file format/raw tables
+   are AIRLINE_DEV_ROLE-owned. Do not recreate the integration: that changes trust IDs.
 5. Apply `sql/04_external_stage.sql` as the service identity; inspect actual stage URL,
    integration and file-format properties (IF NOT EXISTS does not correct drift).
    Upload only selected source ZIP, prepared gzip and manifest under `object_keys()`'s
@@ -121,8 +129,11 @@ owner-only permissions and an encrypted owner-controlled backup. Do not put cred
 in inputs or state. Bucket prevent_destroy/force_destroy=false are deliberate: no
 automatic data deletion or cloud rollback. Attended cleanup requires owner-approved
 object/resource inventory and cost verification, including storage beyond credit expiry.
+Run Terraform with `umask 077`; formatters can rewrite local input files, so recheck
+state/tfvars file modes0600 afterward. Mock tests explicitly override operator funding/
+trust inputs and never inherit live bootstrap values as their test scenario.
 
-## First COPY (not executed)
+## First COPY and subsequent reuse
 
 Only after all hold points and object checks pass:
 
@@ -150,13 +161,40 @@ DEN outcome counts before COMMIT. Existing complete data is revalidated/reused,
 not trusted solely because COPY history exists; partial tables are rejected.
 DDL is outside the transaction and may leave an empty table after failure.
 
-Run **one attended loader at a time**. No concurrency claim, automatic recovery,
+Run **one bounded loader at a time**. No concurrency claim, automatic recovery,
 publication transaction or periodic watchdog exists in this slice. On timeout/client
 failure or unknown COMMIT, retain query IDs, inspect the exact table and query history,
 and independently reconcile before another attempt; never blindly retry, truncate,
-FORCE-load or repoint a published artifact. Live tests still required: exact SQL syntax,
-external access/denials, malformed COPY rollback, full/repeat load, lost-ack recovery
-and concurrent writers. Mock connector tests prove only client control flow.
+FORCE-load or repoint a published artifact. Real SQL, stage access/denial, malformed
+COPY rejection/rollback, wrong-partition rollback, wrong-format rejection and replay
+are now tested. Lost-ack recovery is mocked only; concurrent writers are unqualified.
+Those are not claims of this single-writer initial-ingestion batch. No result is
+published and no refresh/correction workflow is implemented here.
+
+### Opt-in live regression tests
+
+Default unittest discovery skips live tests. They require a separately prepared/staged,
+explicitly synthetic artifact of at most10rows, never the official raw table:
+
+```bash
+AIRLINE_LIVE_TESTS=funded-01-04 \
+AIRLINE_TEST_ARTIFACT=/private/path/to/synthetic-artifact \
+  uv run python -m unittest discover -s tests -p test_live_ingestion.py -v
+```
+
+Prepare synthetic inputs with the same `prepare(..., synthetic=True)` interface and
+the small hand-authored `archive()` helper in tests/test_prepare.py. Stage its gzip at
+`object_keys(manifest)['prepared']`. The executed fixture has two rows, Unicode,
+embedded comma/quote/newline, signed delay and cancellation with a recorded departure.
+Additionally stage gzip CSVs at `prepared/tests/01-04/<artifact-id>/malformed.csv.gz`
+and `wrong-month.csv.gz`: keep the full prepared header; make the last row one field
+short in malformed; change every FlightDate to2025-02-01 in wrong-month without updating
+lineage hashes. Use conditional checksum-verified uploads, not overwrites. The suite
+checks fixture load/reuse, malformed+valid multi-file COPY, wrong partition/fingerprint
+acceptance and deliberately wrong compression. Failure tables are TEMPORARY in
+INGEST_TEST, verified empty after ROLLBACK, and disappear when the session closes.
+The accepted two-row fixture table remains isolated from RAW. Do not run this command
+without current funding and explicit bounded workload authorization.
 
 ## Verified local January evidence
 
@@ -172,8 +210,22 @@ and **69 diversions**. National cancellations **18,740**, diversions **1,316**.
 
 Payload hash: `d157cd8265af901ab310aae74497a1c294c07183802b42469eb86581f6d588b9`.
 Loaded artifact ID: `eb0c52473e89616864f5287d54d2110eb0f53036ecd977e31b7f15671581d7c2`.
-**Snowflake rows loaded by this batch: 0.** No real SQL/data-plane result is inferred
-from local source counts or mocks.
+**Snowflake rows loaded:599,013** in
+`AIRLINE_DB.RAW.BTS_202501_EB0C52473E89616864F5287D54D2110E` (transient, retention0).
+Exact122columns/order/types verified. Distinct ordinals599,013, min1/max599,013;
+wrong source0, wrong month0, full119-field fingerprint mismatches0. DEN cancellations
+313/diversions69. Independent queries against original ZIP-derived aggregate expectations
+also matched31dates (January1–31), national cancellations18,740/diversions1,316,
+negative arrival delays378,711, empty arrival delays20,056, delay14/15 counts3,829/3,614,
+cancelled-with-departure479, leading-zero scheduled clocks176,513 and differing
+marketer/operator codes195,119. No duplicates or imputation were introduced.
+
+COPY query `01c8042c-0309-57a4-0012-6aee00015d26`: SUCCESS,599,013 inserted,
+58,297,889bytes scanned,10.117seconds. Acceptance query
+`01c8042c-0309-57a4-0012-6aee00015d2a`; full-table reuse validation
+`01c8042d-0309-5de7-0012-6aee000170ca` returned reused without a second COPY.
+Independent aggregate/schema query `01c8042f-0309-5de7-0012-6aee000170ce` matched
+all source-derived expectations. A final persisted COUNT remained599,013 after tests.
 
 ## Deployed bootstrap and cost evidence
 
@@ -181,16 +233,31 @@ Bucket: `airline-bts-336805808138-us-east-2`. Role:
 `arn:aws:iam::336805808138:role/airline-snowflake-bts-read`, inline policy
 `airline-read-prepared-only`. Public access blocked in all four settings; ownership
 BucketOwnerEnforced; SSE-S3 AES256; SSE-C blocked; TLS-only bucket policy; no versioning.
-Role reads/list only prepared/, with no upload/delete permissions; trust is currently
-explicit DENY ALL, not a broad placeholder allow. Integration-generated principal and
-external ID are still unavailable; do not invent or enable trust before owner bootstrap.
+Role reads/list only prepared/, with no upload/delete permissions; trust allows only
+the exact generated Snowflake IAM user with exact external ID. AWS GetRole independently
+verified both. Allowed-stage LIST succeeded; attempted stage creation at original/
+was rejected003127/42601 by the integration's allowed-location restriction. This is
+live Snowflake boundary evidence plus IAM policy inspection, not a claim that the
+service role can impersonate Snowflake to test arbitrary AWS APIs directly.
 
-Stored source31,599,374 + prepared58,297,889 + manifest6,890 =89,904,153bytes.
+Stored source31,599,374 + prepared58,297,889 + manifest6,890 =89,904,153bytes,
+plus three tiny synthetic gzip fixtures (2,650bytes), total six objects/89,906,803bytes.
 At the public Ohio S3 Standard first-tier0.023USD/GB-month, storage is approximately
 0.002USD/month before credits, plus small request charges. This is an estimate, not a
-measured bill or $0 guarantee. No paid warehouse workload has run; monitor reports
-0.00credits used. Retention beyond credits/trial expiry and shared usage remain risks;
-review cleanup before expiry, without automatic deletion of retained evidence.
+measured bill or $0 guarantee. The main COPY ran10.117seconds; actual warehouse credit
+metering/billing details are not visible through this restricted role. A bounded
+own-query-history capture reported0.00309cloud-services credits across91tagged queries;
+this is **not total compute/billed credits** and daily billing adjustments/latency apply.
+No new billing privileges, paid usage tools or warehouse polling were enabled. Raw and
+fixture Snowflake storage also incur trial-covered usage. Retention beyond credits/
+trial expiry and shared usage remain risks; review cleanup before expiry without
+automatic deletion of retained evidence.
+
+Final metadata: warehouse **SUSPENDED**, no running/queued queries; account monitor
+reports **0.12credits used/4.88remaining** (initial0.00, account-wide/rounded/lagged,
+not a final invoice or exclusive per-query attribution). RAW table storage54,129,664
+bytes; accepted synthetic table5,120bytes. Only these two persistent data tables
+remain; failure-test temporary tables closed with their sessions.
 
 Public sources checked2026-10-27: [credit terms](https://aws.amazon.com/awscredits/)
 (credit-specific Eligible Services and tax exclusions),
