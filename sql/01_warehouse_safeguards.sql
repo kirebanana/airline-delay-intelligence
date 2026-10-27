@@ -6,5 +6,5 @@ SHOW RESOURCE MONITORS LIKE 'AIRLINE_BUDGET';
 -- Expected warehouse: X-Small, auto_suspend=60, acceleration=false,
 -- statement timeout=600, queued timeout=60. A null warehouse resource_monitor is
 -- normal for account-level protection. Monitor LEVEL must be ACCOUNT; inspect its
--- actual quota, used credits, suspend_at and suspend_immediate_at, not assumed defaults.
+-- actual quota, used credits, suspend_at and suspend_immediately_at, not assumed defaults.
 -- If invisible as AIRLINE_DEV_ROLE, the owner runs the SHOW as ACCOUNTADMIN.

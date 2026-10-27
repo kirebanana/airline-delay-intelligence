@@ -22,6 +22,10 @@ run "private_minimal_storage_and_closed_initial_trust" {
     condition     = aws_s3_bucket_ownership_controls.bts.rule[0].object_ownership == "BucketOwnerEnforced"
     error_message = "Object ACLs must be disabled."
   }
+  assert {
+    condition     = contains(one(aws_s3_bucket_server_side_encryption_configuration.bts.rule).blocked_encryption_types, "SSE-C")
+    error_message = "Preserve AWS's default block on customer-provided encryption keys."
+  }
 }
 
 run "only_generated_identity_can_read_prepared" {

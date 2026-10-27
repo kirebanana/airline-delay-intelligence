@@ -131,8 +131,13 @@ def check_account_monitor(monitor: dict) -> None:
     try:
         quota = Decimal(str(monitor["credit_quota"]))
         used = Decimal(str(monitor["used_credits"]))
-        suspend = Decimal(str(monitor["suspend_at"]).removesuffix("%"))
-        immediate = Decimal(str(monitor["suspend_immediate_at"]).removesuffix("%"))
+        immediate = Decimal(str(monitor["suspend_immediately_at"]).removesuffix("%"))
+        # Immediate suspension alone is valid protection. SHOW uses the column
+        # suspend_immediately_at (not the SQL action's SUSPEND_IMMEDIATE spelling).
+        suspend_value = monitor.get("suspend_at")
+        suspend = (
+            immediate if suspend_value is None else Decimal(str(suspend_value).removesuffix("%"))
+        )
         valid = (
             monitor["name"] == "AIRLINE_BUDGET"
             and monitor["level"] == "ACCOUNT"

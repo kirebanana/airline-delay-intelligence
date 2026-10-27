@@ -71,6 +71,8 @@ resource "aws_s3_bucket_ownership_controls" "bts" {
 resource "aws_s3_bucket_server_side_encryption_configuration" "bts" {
   bucket = aws_s3_bucket.bts.id
   rule {
+    # Preserve the current AWS default; never propose re-enabling customer keys.
+    blocked_encryption_types = ["SSE-C"]
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }

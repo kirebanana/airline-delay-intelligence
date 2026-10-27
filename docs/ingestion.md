@@ -5,17 +5,21 @@ specification baseline `b01f2ad499bc3d4b996f6cc0b9fa2df735aa2abd` and the owner'
 revised data-first order. This is not an amendment to final product requirements.
 **Live ingestion is blocked; the code is not yet Snowflake-qualified.**
 
-Resumption verification (2026-10-27): the owner's warehouse changes are effective:
-X-Small, suspended, auto-suspend60, acceleration=false, statement timeout600 and queue
-timeout60. Owner reports existing account-level AIRLINE_BUDGET. The service role's
-SHOW RESOURCE MONITORS returns no rows: its quota/triggers/usage are **not verified**.
-No new monitor will be created or attached. AWS STS confirms the target account;
-ListBuckets returns none, and Free Tier/Cost Explorer reads are denied. The sole new
-remote object is metadata-only AIRLINE_DB.RAW.BTS_CSV_V1 (its strict properties were
-verified with DESC). Integration creation was denied with003001/42501: missing
-CREATE INTEGRATION on ACCOUNT. No AWS resource or row was created; funding remains
-unverified. Fifteen Python tests, lint/format and three Terraform mock tests pass;
-actual replay, failure handling and COPY remain untested on Snowflake.
+Latest deployment verification (2026-10-27): X-Small, suspended, auto-suspend60,
+acceleration=false, statement timeout600 and queue timeout60. AIRLINE_BUDGET is now
+visible: ACCOUNT level, MONTHLY, quota5, used0, notify50%, immediate suspend100%, no
+graceful-suspend trigger. It was not modified or attached to the warehouse. The loader
+preflight passes against the actual monitor output.
+
+Owner confirms AWS promotional credit156.20USD remaining/3.80used, expiryJuly2027,
+and Snowflake400USD/30-day trial. These are owner attestations, not agent billing API
+results. Exact credit Applicable Products/tax/shared usage remain unobservable through
+the AWS role; see cost caveats below. Seven Terraform resources are deployed and a
+post-deployment plan shows no drift. Source/prepared/manifest objects are uploaded and
+S3 full-object SHA-256 verified. Strict BTS_CSV_V1 exists; integration creation still
+fails003001/42501 (missing CREATE INTEGRATION on ACCOUNT). **No stage or raw rows yet.**
+Sixteen Python tests, lint/format and three Terraform mock tests pass; real replay,
+failure handling and COPY remain untested on Snowflake.
 
 ## Local preparation (no cloud access)
 
@@ -65,21 +69,25 @@ database AIRLINE_DB and warehouse AIRLINE_DEV_WH. No alternate/admin workload id
 1. Owner verifies **actual current** AWS credits, eligible S3/request/transfer services,
    expiration and shared usage in Billing; and Snowflake trial balance/expiry in
    ACCOUNTADMIN's Snowsight trial tile. Free Tier plan status is not a credit balance.
-   Neither credit is a hard $0 cap. Do not upgrade billing or enable paid services.
+   Balance/expiry and trial entitlement are owner-confirmed above; public AWS terms
+   do not generally exclude standard S3, but credit-specific service restrictions and
+   taxes cannot be inferred from a balance. IAM has no additional charge; no KMS or
+   other metered supporting service is provisioned. Neither credit is a hard $0 cap.
+   Do not upgrade billing or enable additional paid services.
 2. Run read-only `sql/01_warehouse_safeguards.sql`. Keep the existing account-level
    AIRLINE_BUDGET unchanged; a null warehouse resource_monitor is expected. For missing
    monitor visibility, the human owner runs `sql/00_owner_verification.sql` using
    ACCOUNTADMIN: SHOW confirms its ACCOUNT level, actual quota, used credits and suspend/
-   immediate-suspend triggers. The commented MONITOR-only grant enables the loader's
-   automated read-only preflight if the owner chooses to permit that visibility; the
-   agent never executes grants to broaden access. No assumed five-credit quota or
-   notification thresholds are substituted for actual values. Resource monitors can
+   immediate-suspend triggers. The owner has now granted MONITOR-only visibility;
+   the agent never executes grants to broaden access. No assumed suspension threshold
+   is substituted for the actual100% immediate trigger. Resource monitors can
    overshoot and do not cover storage/serverless; owner checks notifications separately.
 3. Review `infra/ingestion/` using Terraform 1.13.4 and locked AWS provider 6.33.0:
    `terraform init`, `terraform validate`, `terraform test`, then a separately reviewed
    live plan with the funding guard left false until evidence exists. Mock tests make
-   **no AWS calls**. The resumption live plan was rejected by this guard as intended;
-   its partial output is not a complete deployable plan. No apply was attempted.
+   **no AWS calls**. Following owner funding confirmation and deployment authorization,
+   a saved plan for7 additions/0changes/0deletions was reviewed and applied; the final
+   live plan reports no changes. State is local/ignored with owner-only file permissions.
    `funding_verified` defaults false. Never use `-target` to bypass this guard.
    Initial trust explicitly denies AssumeRole. This creates only one private bucket,
    public-access/ACL/ownership controls, SSE-S3, TLS-only policy and a new prepared-only
@@ -98,7 +106,13 @@ database AIRLINE_DB and warehouse AIRLINE_DEV_WH. No alternate/admin workload id
    integration and file-format properties (IF NOT EXISTS does not correct drift).
    Upload only selected source ZIP, prepared gzip and manifest under `object_keys()`'s
    content-addressed paths, using conditional create/checksum checks; existing different
-   content is a hard failure. No automated uploader is implemented in this blocked slice.
+   content is a hard failure. All three objects were uploaded using short-lived signed
+   PUTs with If-None-Match=* and ChecksumSHA256; HeadObject independently verified
+   FULL_OBJECT checksums/lengths/AES256. Signed URLs were not logged. Transfer workers
+   were bounded, loopback-only and closed after completion; no recurring uploader exists.
+   A bounded repeat conditional PUT to the existing manifest returned PreconditionFailed;
+   a subsequent HeadObject confirmed the original manifest checksum/length unchanged.
+   This proves the S3 no-overwrite boundary, not Snowflake COPY idempotency.
    Read back/check SHA-256, including via the stage; validate permitted prefix access
    and denied outside-prefix access before COPY. Never upload a ZIP as CSV.
 
@@ -123,8 +137,9 @@ copying. A required passphrase comes from local `AIRLINE_KEY_PASSPHRASE`, never 
 The funding flag is an operator attestation, not a live billing API verification.
 The loader checks warehouse size, positive bounded auto-suspend and disabled acceleration,
 then inspects the existing account-level AIRLINE_BUDGET before workloads. It refuses
-an invisible/wrong-level monitor, nonpositive/nonfinite quota, missing suspension
-triggers, triggers above100%, or a used-credit balance at/above the suspend threshold.
+an invisible/wrong-level monitor, nonpositive/nonfinite quota, missing immediate
+suspension, triggers above100%, or a used-credit balance at/above the first suspension
+threshold. A null graceful-suspend trigger is valid when immediate suspension exists.
 It sets bounded session query/queue/lock timeouts. It never creates/changes a monitor.
 Funding/lifecycle coverage and stage/file-format drift still require operator inspection.
 
@@ -159,3 +174,27 @@ Payload hash: `d157cd8265af901ab310aae74497a1c294c07183802b42469eb86581f6d588b9`
 Loaded artifact ID: `eb0c52473e89616864f5287d54d2110eb0f53036ecd977e31b7f15671581d7c2`.
 **Snowflake rows loaded by this batch: 0.** No real SQL/data-plane result is inferred
 from local source counts or mocks.
+
+## Deployed bootstrap and cost evidence
+
+Bucket: `airline-bts-336805808138-us-east-2`. Role:
+`arn:aws:iam::336805808138:role/airline-snowflake-bts-read`, inline policy
+`airline-read-prepared-only`. Public access blocked in all four settings; ownership
+BucketOwnerEnforced; SSE-S3 AES256; SSE-C blocked; TLS-only bucket policy; no versioning.
+Role reads/list only prepared/, with no upload/delete permissions; trust is currently
+explicit DENY ALL, not a broad placeholder allow. Integration-generated principal and
+external ID are still unavailable; do not invent or enable trust before owner bootstrap.
+
+Stored source31,599,374 + prepared58,297,889 + manifest6,890 =89,904,153bytes.
+At the public Ohio S3 Standard first-tier0.023USD/GB-month, storage is approximately
+0.002USD/month before credits, plus small request charges. This is an estimate, not a
+measured bill or $0 guarantee. No paid warehouse workload has run; monitor reports
+0.00credits used. Retention beyond credits/trial expiry and shared usage remain risks;
+review cleanup before expiry, without automatic deletion of retained evidence.
+
+Public sources checked2026-10-27: [credit terms](https://aws.amazon.com/awscredits/)
+(credit-specific Eligible Services and tax exclusions),
+[credit applicability](https://repost.aws/knowledge-center/aws-promotional-credit),
+and [Ohio S3 price list](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/us-east-2/index.json)
+(published2026-10-15). Applicable Products in the owner's credit console remains the
+authority for that specific credit; the restricted service role cannot confirm it.

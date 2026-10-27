@@ -71,7 +71,7 @@ class LoadPlanTests(unittest.TestCase):
                     "credit_quota": "5.0",
                     "used_credits": "0.0",
                     "suspend_at": "75%",
-                    "suspend_immediate_at": "90%",
+                    "suspend_immediately_at": "90%",
                     "notify_at": "50%",
                 }
                 data.update(monitor_overrides or {})
@@ -140,7 +140,7 @@ class LoadPlanTests(unittest.TestCase):
             {"credit_quota": "0"},
             {"credit_quota": "NaN"},
             {"suspend_at": ""},
-            {"suspend_immediate_at": "110%"},
+            {"suspend_immediately_at": "110%"},
             {"used_credits": "4.5"},
         ):
             with self.subTest(overrides=overrides):
@@ -160,6 +160,15 @@ class LoadPlanTests(unittest.TestCase):
             execute_load(
                 conn, manifest(), "airline-bts-336805808138-us-east-2", funding_verified=True
             )
+
+    def test_live_account_monitor_shape_allows_immediate_only_protection(self):
+        conn, _ = self.loader_connection(
+            monitor_overrides={"suspend_at": None, "suspend_immediately_at": "100%"}
+        )
+        result = execute_load(
+            conn, manifest(), "airline-bts-336805808138-us-east-2", funding_verified=True
+        )
+        self.assertEqual(result["status"], "accepted")
 
     def test_plan_is_explicit_strict_and_keeps_full_source_schema(self):
         plan = build_load_plan(manifest(), "airline-bts-336805808138-us-east-2")
