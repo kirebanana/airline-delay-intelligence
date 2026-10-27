@@ -28,7 +28,16 @@ def manifest():
 
 
 class LoadPlanTests(unittest.TestCase):
-    def loader_connection(self, *, reuse=False, corrupt=False, commit_error=False, suspend=60):
+    def loader_connection(
+        self,
+        *,
+        reuse=False,
+        corrupt=False,
+        commit_error=False,
+        suspend=60,
+        monitor_overrides=None,
+        monitor_visible=True,
+    ):
         """Connector boundary double; does not establish Snowflake SQL semantics."""
         good = {
             "ROWS": 599013,
@@ -53,8 +62,19 @@ class LoadPlanTests(unittest.TestCase):
                     "size": "X-Small",
                     "auto_suspend": suspend,
                     "enable_query_acceleration": False,
-                    "resource_monitor": "AIRLINE_INGEST_RM",
+                    "resource_monitor": "null",  # account-level protection is sufficient
                 }
+            elif sql.startswith("SHOW RESOURCE MONITORS"):
+                data = {
+                    "name": "AIRLINE_BUDGET",
+                    "level": "ACCOUNT",
+                    "credit_quota": "5.0",
+                    "used_credits": "0.0",
+                    "suspend_at": "75%",
+                    "suspend_immediate_at": "90%",
+                    "notify_at": "50%",
+                }
+                data.update(monitor_overrides or {})
             elif sql.startswith("SHOW TABLES"):
                 data = {
                     "comment": build_load_plan(manifest(), "airline-bts-336805808138-us-east-2")[
@@ -70,7 +90,11 @@ class LoadPlanTests(unittest.TestCase):
                 data = {}
             cur.description = [(k,) for k in data]
             cur.fetchone.return_value = tuple(data.values())
-            cur.fetchall.return_value = [tuple(data.values())]
+            cur.fetchall.return_value = (
+                []
+                if sql.startswith("SHOW RESOURCE MONITORS") and not monitor_visible
+                else [tuple(data.values())]
+            )
             cur.sfqid = "synthetic-query-id"
             if sql == "COMMIT" and commit_error:
                 raise ConnectionError("Lost acknowledgment")
@@ -109,6 +133,33 @@ class LoadPlanTests(unittest.TestCase):
                 conn, manifest(), "airline-bts-336805808138-us-east-2", funding_verified=True
             )
         self.assertEqual(cur.execute.call_count, 1)
+
+    def test_account_monitor_is_verified_before_any_workload(self):
+        for overrides in (
+            {"level": "WAREHOUSE"},
+            {"credit_quota": "0"},
+            {"credit_quota": "NaN"},
+            {"suspend_at": ""},
+            {"suspend_immediate_at": "110%"},
+            {"used_credits": "4.5"},
+        ):
+            with self.subTest(overrides=overrides):
+                conn, cur = self.loader_connection(monitor_overrides=overrides)
+                with self.assertRaisesRegex(ValueError, "monitor"):
+                    execute_load(
+                        conn,
+                        manifest(),
+                        "airline-bts-336805808138-us-east-2",
+                        funding_verified=True,
+                    )
+                self.assertTrue(
+                    all(c.args[0].startswith("SHOW ") for c in cur.execute.call_args_list)
+                )
+        conn, _ = self.loader_connection(monitor_visible=False)
+        with self.assertRaisesRegex(ValueError, "monitor"):
+            execute_load(
+                conn, manifest(), "airline-bts-336805808138-us-east-2", funding_verified=True
+            )
 
     def test_plan_is_explicit_strict_and_keeps_full_source_schema(self):
         plan = build_load_plan(manifest(), "airline-bts-336805808138-us-east-2")

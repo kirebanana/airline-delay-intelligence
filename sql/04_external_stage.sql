@@ -1,4 +1,5 @@
--- Run as AIRLINE_DEV_ROLE only after integration trust/access and safeguards pass.
+-- File format created and DESC-verified by AIRLINE_DEV_ROLE, 2026-10-27 resumption.
+-- The stage remains unexecuted: funding, integration trust/access and controls gate it.
 -- No OR REPLACE: existing objects must be inspected, not silently overwritten.
 CREATE FILE FORMAT IF NOT EXISTS AIRLINE_DB.RAW.BTS_CSV_V1
   TYPE = CSV COMPRESSION = GZIP ENCODING = 'UTF8'

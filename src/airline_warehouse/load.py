@@ -8,6 +8,7 @@ tables must match the exact artifact metadata; ambiguous outcomes require inspec
 import hashlib
 import json
 import re
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from airline_warehouse.prepare import BTS_COLUMNS, CONTRACT, LINEAGE, sha256_file
@@ -125,6 +126,28 @@ def read_artifact(directory: Path) -> dict:
     return manifest
 
 
+def check_account_monitor(monitor: dict) -> None:
+    """Inspect existing protection only; never create, attach or alter a monitor."""
+    try:
+        quota = Decimal(str(monitor["credit_quota"]))
+        used = Decimal(str(monitor["used_credits"]))
+        suspend = Decimal(str(monitor["suspend_at"]).removesuffix("%"))
+        immediate = Decimal(str(monitor["suspend_immediate_at"]).removesuffix("%"))
+        valid = (
+            monitor["name"] == "AIRLINE_BUDGET"
+            and monitor["level"] == "ACCOUNT"
+            and all(v.is_finite() for v in (quota, used, suspend, immediate))
+            and quota > 0
+            and used >= 0
+            and 0 < suspend <= immediate <= 100
+            and used < quota * suspend / 100
+        )
+    except (KeyError, InvalidOperation):
+        valid = False
+    if not valid:
+        raise ValueError("Account monitor quota/suspension protection is unavailable or exhausted")
+
+
 def execute_load(connection, manifest: dict, bucket: str, *, funding_verified: bool) -> dict:
     """Explicit invocation after funding approval; callers provide a scoped connection.
 
@@ -146,9 +169,17 @@ def execute_load(connection, manifest: dict, bucket: str, *, funding_verified: b
             wh["size"] != "X-Small"
             or not 0 < int(wh["auto_suspend"]) <= 60
             or str(wh["enable_query_acceleration"]).lower() != "false"
-            or wh["resource_monitor"] != "AIRLINE_INGEST_RM"
         ):
             raise ValueError("Project warehouse cost controls are not ready; refusing load")
+        cur.execute("SHOW RESOURCE MONITORS LIKE 'AIRLINE_BUDGET'")
+        names = [c[0].lower() for c in cur.description]
+        monitors = [dict(zip(names, r, strict=True)) for r in cur.fetchall()]
+        monitors = [m for m in monitors if m.get("name") == "AIRLINE_BUDGET"]
+        if len(monitors) != 1:
+            raise ValueError(
+                "Account monitor is not visible; owner verification/access is required"
+            )
+        check_account_monitor(monitors[0])
         cur.execute("USE WAREHOUSE AIRLINE_DEV_WH")
         cur.execute(
             "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=600, "

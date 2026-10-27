@@ -5,6 +5,18 @@ specification baseline `b01f2ad499bc3d4b996f6cc0b9fa2df735aa2abd` and the owner'
 revised data-first order. This is not an amendment to final product requirements.
 **Live ingestion is blocked; the code is not yet Snowflake-qualified.**
 
+Resumption verification (2026-10-27): the owner's warehouse changes are effective:
+X-Small, suspended, auto-suspend60, acceleration=false, statement timeout600 and queue
+timeout60. Owner reports existing account-level AIRLINE_BUDGET. The service role's
+SHOW RESOURCE MONITORS returns no rows: its quota/triggers/usage are **not verified**.
+No new monitor will be created or attached. AWS STS confirms the target account;
+ListBuckets returns none, and Free Tier/Cost Explorer reads are denied. The sole new
+remote object is metadata-only AIRLINE_DB.RAW.BTS_CSV_V1 (its strict properties were
+verified with DESC). Integration creation was denied with003001/42501: missing
+CREATE INTEGRATION on ACCOUNT. No AWS resource or row was created; funding remains
+unverified. Fifteen Python tests, lint/format and three Terraform mock tests pass;
+actual replay, failure handling and COPY remain untested on Snowflake.
+
 ## Local preparation (no cloud access)
 
 Python 3.12; runtime preparation uses only the standard library. From this repository:
@@ -54,15 +66,20 @@ database AIRLINE_DB and warehouse AIRLINE_DEV_WH. No alternate/admin workload id
    expiration and shared usage in Billing; and Snowflake trial balance/expiry in
    ACCOUNTADMIN's Snowsight trial tile. Free Tier plan status is not a credit balance.
    Neither credit is a hard $0 cap. Do not upgrade billing or enable paid services.
-2. An already authorized human administrator reviews/applies
-   `sql/01_warehouse_safeguards.sql`: project-only non-resetting 5-credit monitor,
-   notify at 50%, suspend at 75%, immediate suspend at 90%, disable Query Acceleration,
-   X-Small, auto-suspend 60s, statement 600s and queue 60s. Inspect existing monitor
-   settings if it already exists; IF NOT EXISTS does not repair drift. No workload-role
-   elevation. Resource monitors can overshoot and do not cover storage/serverless.
+2. Run read-only `sql/01_warehouse_safeguards.sql`. Keep the existing account-level
+   AIRLINE_BUDGET unchanged; a null warehouse resource_monitor is expected. For missing
+   monitor visibility, the human owner runs `sql/00_owner_verification.sql` using
+   ACCOUNTADMIN: SHOW confirms its ACCOUNT level, actual quota, used credits and suspend/
+   immediate-suspend triggers. The commented MONITOR-only grant enables the loader's
+   automated read-only preflight if the owner chooses to permit that visibility; the
+   agent never executes grants to broaden access. No assumed five-credit quota or
+   notification thresholds are substituted for actual values. Resource monitors can
+   overshoot and do not cover storage/serverless; owner checks notifications separately.
 3. Review `infra/ingestion/` using Terraform 1.13.4 and locked AWS provider 6.33.0:
    `terraform init`, `terraform validate`, `terraform test`, then a separately reviewed
-   live plan only after the funding hold point. Mock tests make **no AWS calls**.
+   live plan with the funding guard left false until evidence exists. Mock tests make
+   **no AWS calls**. The resumption live plan was rejected by this guard as intended;
+   its partial output is not a complete deployable plan. No apply was attempted.
    `funding_verified` defaults false. Never use `-target` to bypass this guard.
    Initial trust explicitly denies AssumeRole. This creates only one private bucket,
    public-access/ACL/ownership controls, SSE-S3, TLS-only policy and a new prepared-only
@@ -73,6 +90,10 @@ database AIRLINE_DB and warehouse AIRLINE_DEV_WH. No alternate/admin workload id
    external ID privately. Set both Terraform inputs together, inspect the trust diff,
    then apply only the new role's exact principal/external-ID trust. No account-root
    wildcard allow. Service role receives integration USAGE, not CREATE INTEGRATION.
+   This is the exact owner-run SQL for the observed privilege blocker; use the owner's
+   existing ACCOUNTADMIN session, not the service identity. Do not grant CREATE
+   INTEGRATION or ACCOUNTADMIN to the workload role. Do not run it until funding and
+   the closed-trust role bootstrap have passed.
 5. Apply `sql/04_external_stage.sql` as the service identity; inspect actual stage URL,
    integration and file-format properties (IF NOT EXISTS does not correct drift).
    Upload only selected source ZIP, prepared gzip and manifest under `object_keys()`'s
@@ -100,9 +121,12 @@ uv run airline load --artifact /private/path/new-artifact-directory \
 The optional pinned connector reuses the existing named key-pair connection; no key
 copying. A required passphrase comes from local `AIRLINE_KEY_PASSPHRASE`, never Git.
 The funding flag is an operator attestation, not a live billing API verification.
-The loader checks warehouse size, positive bounded auto-suspend, disabled acceleration
-and named monitor before workloads, and sets bounded session query/queue/lock timeouts.
-Operator inspection must verify monitor thresholds and stage/file-format drift.
+The loader checks warehouse size, positive bounded auto-suspend and disabled acceleration,
+then inspects the existing account-level AIRLINE_BUDGET before workloads. It refuses
+an invisible/wrong-level monitor, nonpositive/nonfinite quota, missing suspension
+triggers, triggers above100%, or a used-credit balance at/above the suspend threshold.
+It sets bounded session query/queue/lock timeouts. It never creates/changes a monitor.
+Funding/lifecycle coverage and stage/file-format drift still require operator inspection.
 
 One transient, zero-retention raw table per artifact, 122 NOT NULL columns (only ordinal
 numeric). Strict CSV preserves empty strings; COPY uses ABORT_STATEMENT, FORCE=false,
