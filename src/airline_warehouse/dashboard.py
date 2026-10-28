@@ -30,13 +30,15 @@ class Reader:
             descriptor = json.loads(self.development_candidate.read_text())
             relation(descriptor, development=True)
             return {**descriptor, "development": True, "target": "development"}
-        raise ValueError(
-            "Published read provider is not initialized; ticket07 bootstrap is pending"
-        )
+        from airline_warehouse.publication import active_release
+
+        return active_release(self.connection, "january")
 
     def validate(self, descriptor):
         if not descriptor.get("development"):
-            raise ValueError("No publication-qualified reader token is available yet")
+            from airline_warehouse.publication import validate_reader_token
+
+            validate_reader_token(self.connection, descriptor)
 
     def options(self, descriptor):
         return filter_options(
@@ -94,6 +96,8 @@ def render(reader):
         + str(descriptor.get("built_at"))
         + "; release: "
         + str(descriptor.get("release_id", "none (development)"))
+        + "; published: "
+        + str(descriptor.get("published_at", "not published"))
     )
 
     def reset():

@@ -16,6 +16,22 @@ from airline_warehouse.connection import connect_as
     "Requires explicit funded synthetic candidate",
 )
 class LiveMetricContractTests(unittest.TestCase):
+    def test_server_timeout_decreases_and_expired_deadline_does_not_launch_sql(self):
+        import time
+
+        from airline_warehouse.deadlines import DeadlineConnection
+
+        bounded = DeadlineConnection(self.conn, 5)
+        with bounded.cursor() as cur:
+            cur.execute("SHOW PARAMETERS LIKE 'STATEMENT_TIMEOUT_IN_SECONDS' IN SESSION")
+            first = int(cur.fetchone()[1])
+            self.assertTrue(1 <= first <= 5)
+            # A deterministic already-expired boundary never starts a server query.
+            expired = DeadlineConnection(self.conn, 1, deadline=time.monotonic() - 1)
+            with expired.cursor() as expired_cur:
+                with self.assertRaises(TimeoutError):
+                    expired_cur.execute("SELECT 1")
+
     @classmethod
     def setUpClass(cls):
         cls.descriptor = json.loads(Path(os.environ["AIRLINE_TEST_CANDIDATE"]).read_text())

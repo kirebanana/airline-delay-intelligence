@@ -6,13 +6,15 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import tomllib
 import uuid
 from pathlib import Path
 
-from airline_warehouse.budget import live_budget
+from airline_warehouse.budget import live_budget, mark_recovery
 from airline_warehouse.connection import connect
+from airline_warehouse.deadlines import DeadlineConnection
 from airline_warehouse.load import build_load_plan, check_validation
 
 BUCKET = "airline-bts-336805808138-us-east-2"
@@ -39,6 +41,20 @@ def candidate_plan(manifests: list[dict], schema: str) -> dict:
     return {"schema": schema, "inputs": inputs, "raw_tables": tables, "expected_rows": rows}
 
 
+def processing_contract():
+    project = Path(__file__).resolve().parents[2] / "dbt"
+    digest = hashlib.sha256()
+    for p in sorted(project.rglob("*")):
+        if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
+            digest.update(str(p.relative_to(project)).encode())
+            digest.update(p.read_bytes())
+    for name in ("dbt_runner.py", "deadlines.py"):
+        digest.update(name.encode())
+        digest.update((Path(__file__).parent / name).read_bytes())
+    digest.update((project.parent / "uv.lock").read_bytes())
+    return digest.hexdigest()
+
+
 def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> dict:
     """Create-only build. Non-success never emits a sealed candidate descriptor."""
     output = Path(output).resolve()
@@ -47,11 +63,7 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
     schema = "WORK_" + uuid.uuid4().hex[:24].upper()
     plan = candidate_plan(manifests, schema)
     project = Path(__file__).resolve().parents[2] / "dbt"
-    digest = hashlib.sha256()
-    for p in sorted(project.rglob("*")):
-        if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
-            digest.update(str(p.relative_to(project)).encode())
-            digest.update(p.read_bytes())
+    contract = processing_contract()
     output.mkdir(parents=True)
     env = os.environ.copy()
     config = tomllib.loads((Path.home() / ".snowflake/config.toml").read_text())
@@ -65,7 +77,8 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
     try:
         with connect() as conn, live_budget(conn, budget_path) as remaining:
             deadline = time.monotonic() + remaining
-            with conn.cursor() as cur:
+            env["AIRLINE_DBT_DEADLINE"] = str(deadline)
+            with DeadlineConnection(conn, remaining, deadline=deadline).cursor() as cur:
                 sql_started = True
                 cur.execute("USE SECONDARY ROLES NONE")
                 cur.execute(
@@ -91,7 +104,9 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
                     + " UNION ALL ".join(selects)
                 )
             command = [
-                "dbt",
+                sys.executable,
+                "-m",
+                "airline_warehouse.dbt_runner",
                 "build",
                 "--project-dir",
                 str(project),
@@ -132,7 +147,7 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
                 raise RecoveryRequired("Incomplete dbt outcome; refuse to seal candidate")
         descriptor = {
             **plan,
-            "processing_contract": digest.hexdigest(),
+            "processing_contract": contract,
             "sealed": True,
             "tables": ["FACT_FLIGHTS", "DIM_DATE", "DIM_AIRPORT", "DIM_CARRIER"],
             "built_at": dt.datetime.now(dt.UTC).isoformat(),
@@ -143,11 +158,7 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
     except BaseException as error:
         uncertain = sql_started and not isinstance(error, ValueError)
         if uncertain:
-            state = json.loads(Path(budget_path).read_text())
-            state.update(
-                recovery_required=True, uncertain_schema=schema, query_tag=env["AIRLINE_QUERY_TAG"]
-            )
-            Path(budget_path).write_text(json.dumps(state, indent=2) + "\n")
+            mark_recovery(budget_path, uncertain_schema=schema, query_tag=env["AIRLINE_QUERY_TAG"])
         (output / "failure.json").write_text(
             json.dumps(
                 {

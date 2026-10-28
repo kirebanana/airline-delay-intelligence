@@ -25,6 +25,15 @@ def main(argv=None):
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--budget-state", type=Path, required=True)
     p.add_argument("--funding-verified", action="store_true")
+    p = sub.add_parser("refresh", help="Finite prepared-input refresh or explicit stage rerun")
+    p.add_argument("--artifact", type=Path, action="append", required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--budget-state", type=Path, required=True)
+    p.add_argument("--target", required=True)
+    p.add_argument("--request-id", required=True)
+    p.add_argument("--stage", choices=("full", "build", "publish"), default="full")
+    p.add_argument("--candidate", type=Path)
+    p.add_argument("--funding-verified", action="store_true")
     for name in ("plan-load", "load"):
         p = sub.add_parser(name, help="Explicit raw COPY plan or funded/controlled live execution")
         p.add_argument("--artifact", type=Path, required=True)
@@ -44,6 +53,20 @@ def main(argv=None):
                 args.month,
                 synthetic=args.synthetic,
                 expected_sha256=args.expected_sha256,
+            )
+        elif args.command == "refresh":
+            if not args.funding_verified:
+                raise ValueError("Explicit funded workload approval is required before refresh")
+            from airline_warehouse.refresh import refresh
+
+            result = refresh(
+                args.artifact,
+                args.output,
+                args.budget_state,
+                args.target,
+                args.request_id,
+                stage=args.stage,
+                candidate_path=args.candidate,
             )
         elif args.command == "build":
             if not args.funding_verified:

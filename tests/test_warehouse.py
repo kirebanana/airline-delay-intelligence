@@ -10,8 +10,23 @@ from airline_warehouse.warehouse import candidate_plan
 
 
 class WarehouseContractTests(unittest.TestCase):
+    def test_two_local_processes_cannot_spend_the_same_budget_concurrently(self):
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "budget.json"
+            with Path(str(path) + ".lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, "already active"):
+                    with live_budget(None, path):
+                        self.fail("Concurrent budget admission")
+
     def test_unknown_or_corrupt_prior_work_refuses_live_admission_before_connection_access(self):
-        for update in ({"recovery_required": True}, {"elapsed_seconds": -1}):
+        for update in (
+            {"recovery_required": True},
+            {"operation_active": True},
+            {"elapsed_seconds": -1},
+        ):
             with self.subTest(update=update), tempfile.TemporaryDirectory() as tmp:
                 path = Path(tmp) / "budget.json"
                 path.write_text(

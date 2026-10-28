@@ -1,5 +1,6 @@
 """Single-operator batch accounting, not a billing cap or recovery watchdog."""
 
+import fcntl
 import json
 import math
 import time
@@ -14,12 +15,28 @@ from airline_warehouse.load import check_account_monitor
 def live_budget(connection, state_path: Path):
     path = Path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    with Path(str(path) + ".lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ValueError("Batch budget already active in another local process") from error
+        try:
+            with _accounted_budget(connection, path) as remaining:
+                yield remaining
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+@contextmanager
+def _accounted_budget(connection, state_path: Path):
+    path = Path(state_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     state = (
         json.loads(path.read_text())
         if path.exists()
         else {"baseline_credits": "0.12", "elapsed_seconds": 0, "operations": []}
     )
-    if state.get("recovery_required"):
+    if state.get("recovery_required") or state.get("operation_active"):
         raise ValueError(
             "Unknown prior work requires attended reconciliation before another live operation"
         )
@@ -53,9 +70,26 @@ def live_budget(connection, state_path: Path):
         ):
             raise ValueError("Warehouse safeguards differ from approved limits")
     start = time.monotonic()
+    state["operation_active"] = True
+    path.write_text(json.dumps(state, indent=2) + "\n")
     try:
         yield min(remaining, 600)
+    except BaseException as error:
+        if not isinstance(error, ValueError):
+            state.update(recovery_required=True, uncertain_error_type=type(error).__name__)
+        raise
     finally:
         state["elapsed_seconds"] += time.monotonic() - start
+        state.pop("operation_active", None)
         state["operations"].append({"elapsed_seconds": time.monotonic() - start})
+        path.write_text(json.dumps(state, indent=2) + "\n")
+
+
+def mark_recovery(state_path: Path, **details):
+    """Enrich a blocked operation under the same lock; never overwrite another writer."""
+    path = Path(state_path)
+    with Path(str(path) + ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = json.loads(path.read_text())
+        state.update(recovery_required=True, **details)
         path.write_text(json.dumps(state, indent=2) + "\n")

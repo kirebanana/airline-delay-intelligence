@@ -65,6 +65,21 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_expired_token_stops_before_cached_results_without_fallback(self):
+        class ExpiredReader(FixtureReader):
+            def __init__(self):
+                self.checks = 0
+
+            def validate(self, descriptor):
+                self.checks += 1
+                if self.checks >= 2:
+                    raise ValueError("Expired token")
+
+        app = AppTest.from_function(render, args=(ExpiredReader(),)).run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("Reload" in message.value for message in app.error))
+
     def test_filters_empty_and_reset_preserve_explicit_development_scope(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
         self.assertFalse(app.exception)

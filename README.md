@@ -1,11 +1,12 @@
 # Airline Delay Intelligence
 
 Project deliverables for Airline Delay Intelligence. **Status: PRD and technical
-specification v0.4 approved; tickets 01–04 implementation batch ready for review.**
+specification v0.4 approved; 01–04 accepted, 05–10 implemented and awaiting batch review.**
 The [approved PRD](docs/prds/airline-delay-intelligence.md) defines product scope and
 acceptance; the [approved specification](docs/specifications/airline-delay-intelligence.md)
 defines architecture and phase-specific feasibility gates. The owner authorized
-the revised data-first 01–04 batch on 2026-10-27; later work remains gated.
+the revised data-first 01–04 batch on 2026-10-27 and bounded05–10 work on2026-10-28;
+ticket11 and later work remain gated.
 Prior research is reference material, not additional approved requirements.
 
 ## Planning workflow
@@ -31,7 +32,9 @@ Snowflake safeguards → BTS preparation → private S3/external stage → raw C
 dbt → development Streamlit → safe publication. No internal-stage fallback was built.
 January preparation and real S3 → external stage → raw COPY ingestion are now verified:
 599,013 source rows,24,732 DEN departures, exact lineage/fingerprints and replay reuse.
-Tickets01–04 are ready for batch review; ticket05 and later work have not started.
+January dbt models and local aggregate analytics are implemented. See
+[the analytics runbook](docs/analytics.md) for publication, explicit refresh/stage
+reruns, release-pinned reads and current qualification limits.
 
 ## Preparation and ingestion
 

@@ -37,7 +37,7 @@ def fixture(directory: Path, kind="metrics") -> dict:
             }
             for i in range(199)
         ]
-    elif kind in ("metrics", "unknown", "invalid"):
+    elif kind in ("metrics", "unknown", "invalid", "correction"):
         rows = [
             {
                 **common,
@@ -81,6 +81,19 @@ def fixture(directory: Path, kind="metrics") -> dict:
         if kind == "invalid":
             rows[0]["ArrDelay"] = "NaN"
             rows[-1]["OriginAirportID"] = "0"
+        if kind == "correction":
+            rows.pop()  # remove known-indicator row with structurally missing signed delays
+            rows[0]["ArrDelay"] = "-20"
+            rows.append(
+                {
+                    **common,
+                    "ArrDelay": "15",
+                    "DepDelay": "15",
+                    "ArrDel15": "1",
+                    "DepDel15": "1",
+                    "DepTime": "0010",
+                }
+            )
     else:
         raise ValueError("Unknown hand-authored fixture")
     directory.parent.mkdir(parents=True, exist_ok=True)
