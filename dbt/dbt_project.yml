@@ -1,0 +1,15 @@
+name: airline_models
+version: '0.1.0'
+config-version: 2
+profile: airline_warehouse
+model-paths: [models]
+test-paths: [tests]
+macro-paths: [macros]
+flags:
+  send_anonymous_usage_stats: false
+models:
+  airline_models:
+    +materialized: table
+    +transient: true
+    +data_retention_time_in_days: 1
+    +pre-hook: "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=600, STATEMENT_QUEUED_TIMEOUT_IN_SECONDS=60, LOCK_TIMEOUT=5"

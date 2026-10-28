@@ -31,4 +31,8 @@ artifacts/
 *.tfplan
 *.tfvars
 .terraform/
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+*.pub
 crash.log

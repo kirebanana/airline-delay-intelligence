@@ -1,0 +1,9 @@
+version: 2
+sources:
+  - name: selected_input
+    description: Explicit union of one accepted immutable raw artifact per selected month.
+    database: AIRLINE_DB
+    schema: "{{ target.schema }}"
+    tables:
+      - name: selected_raw
+        description: Run-local source view; not a serving or published object.

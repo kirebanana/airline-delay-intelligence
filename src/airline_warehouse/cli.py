@@ -20,6 +20,11 @@ def main(argv=None):
     p.add_argument("--month", required=True)
     p.add_argument("--expected-sha256", required=True, help="Selected source snapshot checksum")
     p.add_argument("--synthetic", action="store_true", help="Explicitly label test fixtures")
+    p = sub.add_parser("build", help="Create and test an isolated dbt candidate; never publish")
+    p.add_argument("--artifact", type=Path, action="append", required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--budget-state", type=Path, required=True)
+    p.add_argument("--funding-verified", action="store_true")
     for name in ("plan-load", "load"):
         p = sub.add_parser(name, help="Explicit raw COPY plan or funded/controlled live execution")
         p.add_argument("--artifact", type=Path, required=True)
@@ -39,6 +44,16 @@ def main(argv=None):
                 args.month,
                 synthetic=args.synthetic,
                 expected_sha256=args.expected_sha256,
+            )
+        elif args.command == "build":
+            if not args.funding_verified:
+                raise ValueError(
+                    "Explicit funded workload approval is required before a model build"
+                )
+            from airline_warehouse.warehouse import build_candidate
+
+            result = build_candidate(
+                [read_artifact(p) for p in args.artifact], args.output, args.budget_state
             )
         else:
             manifest = read_artifact(args.artifact)

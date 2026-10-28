@@ -1,0 +1,39 @@
+version: 2
+models:
+  - name: stg_flights
+    description: All source values retained plus typed analytical fields; no imputation/deduplication.
+  - name: dim_date
+    columns:
+      - name: date_key
+        data_tests: [unique, not_null]
+  - name: dim_airport
+    description: Stable airport ID; deterministic current-scope label, original sequence/attributes retained on each fact.
+    columns:
+      - name: airport_id
+        data_tests: [unique, not_null]
+  - name: dim_carrier
+    description: Stable DOT ID; flight-level marketer/operator assignments remain on each fact.
+    columns:
+      - name: carrier_id
+        data_tests: [unique, not_null]
+  - name: fact_flights
+    description: One selected source row, keyed by dataset/source-version/ordinal, not physical aircraft movement.
+    columns:
+      - name: flight_key
+        data_tests: [unique, not_null]
+      - name: origin_id
+        data_tests:
+          - relationships:
+              arguments: {to: "ref('dim_airport')", field: airport_id}
+      - name: destination_id
+        data_tests:
+          - relationships:
+              arguments: {to: "ref('dim_airport')", field: airport_id}
+      - name: marketing_carrier_id
+        data_tests:
+          - relationships:
+              arguments: {to: "ref('dim_carrier')", field: carrier_id}
+      - name: operating_carrier_id
+        data_tests:
+          - relationships:
+              arguments: {to: "ref('dim_carrier')", field: carrier_id}

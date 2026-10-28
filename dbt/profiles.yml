@@ -1,0 +1,20 @@
+# Key path/passphrase are local environment references, never credential values.
+airline_warehouse:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: LMOOEWP-DQ15927
+      user: AIRLINE_DEV
+      role: AIRLINE_DEV_ROLE
+      database: AIRLINE_DB
+      warehouse: AIRLINE_DEV_WH
+      schema: "{{ env_var('AIRLINE_DBT_SCHEMA', 'WORK_000000000000000000000000') }}"
+      private_key_path: "{{ env_var('AIRLINE_DBT_KEY', '/not-configured') }}"
+      threads: 2
+      connect_retries: 0
+      connect_timeout: 15
+      retry_on_database_errors: false
+      retry_all: false
+      client_session_keep_alive: false
+      query_tag: "{{ env_var('AIRLINE_QUERY_TAG', 'airline:batch05-10:parse') }}"

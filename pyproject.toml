@@ -7,6 +7,12 @@ dependencies = []
 
 [project.optional-dependencies]
 load = ["snowflake-connector-python==4.8.1"]
+analytics = [
+    "dbt-core==1.12.6",
+    "dbt-snowflake==1.12.4",
+    "snowflake-connector-python==4.8.1",
+    "streamlit==1.66.1",
+]
 
 [project.scripts]
 airline = "airline_warehouse.cli:main"
