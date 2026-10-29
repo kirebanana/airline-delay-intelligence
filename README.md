@@ -1,55 +1,91 @@
 # Airline Delay Intelligence
 
-Project deliverables for Airline Delay Intelligence. **Status: PRD and technical
-specification v0.4 approved; 01–04 accepted, 05–10 implemented and awaiting batch review.**
-The [approved PRD](docs/prds/airline-delay-intelligence.md) defines product scope and
-acceptance; the [approved specification](docs/specifications/airline-delay-intelligence.md)
-defines architecture and phase-specific feasibility gates. The owner authorized
-the revised data-first 01–04 batch on 2026-10-27 and bounded05–10 work on2026-10-28;
-ticket11 and later work remain gated.
-Prior research is reference material, not additional approved requirements.
+A data engineering project that transforms historical U.S. airline records into a
+Snowflake warehouse and an interactive reliability dashboard. Built with **Python,
+Amazon S3, Snowflake, dbt Core, Streamlit, and Terraform**.
 
-## Planning workflow
+The January 2025 dataset contains **599,013 reported scheduled operation rows**,
+including **24,732 Denver departures**. The focus is both useful analysis and a
+reproducible pipeline: preserving source data, handling corrections without double
+counting, and keeping incomplete refreshes out of the dashboard.
 
-1. Thorough requirements interview.
-2. Reviewed and approved PRD.
-3. Reviewed and approved technical specification.
-4. Reviewed tickets, then publication to this repository's GitHub Issues.
-5. Mostly autonomous implementation within approved batches, with batch reviews.
+## Analytics
 
-Commit all approved PRDs, specifications, ADRs, and other documentation here.
-Track implementation tickets in this repository's GitHub Issues.
-Link issues to approved document revisions and acceptance criteria.
+Explore arrival punctuality, cancellations, diversions, and departure delays by
+marketing carrier, origin airport, directional route, weekday, and scheduled local
+departure hour. Date, carrier, and airport filters support focused comparisons;
+mean, median, and p90 show how typical delays differ from the long tail.
 
-## Documentation
+The dashboard helps investigate questions such as:
 
-- [Airline Delay Intelligence PRD](docs/prds/airline-delay-intelligence.md): approved 2026-10-26.
-- [Airline Delay Intelligence technical specification](docs/specifications/airline-delay-intelligence.md): v0.4, approved 2026-10-26.
-- `docs/adrs/`: approved architecture decision records.
+- Which carriers combine punctual arrivals with fewer cancellations?
+- Which airports and scheduled hours have higher departure-delay rates?
+- How does reliability differ between a route and its reverse direction?
 
-ADRs may be added when separate decision records are needed. The revised path is
-Snowflake safeguards → BTS preparation → private S3/external stage → raw COPY →
-dbt → development Streamlit → safe publication. No internal-stage fallback was built.
-January preparation and real S3 → external stage → raw COPY ingestion are now verified:
-599,013 source rows,24,732 DEN departures, exact lineage/fingerprints and replay reuse.
-January dbt models and local aggregate analytics are implemented. See
-[the analytics runbook](docs/analytics.md) for publication, explicit refresh/stage
-reruns, release-pinned reads and current qualification limits.
+Comparisons include eligible counts and small-group warnings. They describe
+historical performance—not predictions, passenger impact, or proof of causation.
 
-## Preparation and ingestion
+## Architecture
 
-See [the ingestion runbook](docs/ingestion.md) for deterministic preparation,
-tests, infrastructure controls, load commands and the live-validation hold points.
-No datasets, credentials or Terraform state belong in Git.
+```mermaid
+flowchart TD
+    A["BTS archive"] --> B["Python preparation and checksums"]
+    B --> C["Private Amazon S3"]
+    C -->|"External stage / COPY INTO"| D["Snowflake RAW tables"]
+    D --> E["dbt staging, dimensions, and flight fact"]
+    E --> F["Validate and freeze a release"]
+    F -->|"SQL aggregates"| G["Local Streamlit dashboard"]
+```
 
-## Repository boundary
+Official [BTS Marketing Carrier On-Time Performance](https://www.transtats.bts.gov/)
+archives are imported explicitly and prepared locally. All 119 source fields are
+preserved alongside file and row fingerprints. Snowflake loads the prepared data
+from private S3; each accepted artifact has its own RAW table.
 
-This is an independent Git repository nested at `project/` inside the separate
-`airline-warehouse/` research workspace. It is not a submodule. Research remains
-in the parent repository; approved project deliverables belong here.
+Five dbt models provide staging, date/airport/carrier dimensions, and a flight fact.
+Each fact represents one selected source row, retaining marketing and operating
+carrier identities—not a passenger journey or a guaranteed unique aircraft movement.
+Snowflake calculates filtered rates and percentiles; the dashboard receives
+aggregates rather than downloading the full flight dataset.
 
-Agent instructions, skill configuration, scratch files, and environment notes
-are maintained in the outer workspace, not this deliverables repository. When
-working from that workspace, consult its root `AGENTS.md` and `docs/workflow.md`.
-This repository remains usable independently; those local operating instructions
-are not part of the project's product documentation.
+### Key design choices
+
+- **Traceable, repeatable inputs.** Select one accepted source version per month.
+  Replays reuse compatible results; corrections replace a month's contribution
+  without overwriting its history or adding it twice.
+- **Safe publication.** Build in isolation, clone and validate the completed result,
+  then atomically select the release. Failed updates leave the previous release
+  available, and each dashboard render uses one consistent release.
+- **Separated access.** Builder, publisher, and reader use distinct service identities.
+  S3 access is scoped, and the dashboard reads named released views only.
+- **Tested behavior.** Data checks reconcile source values, keys, joins, and metric
+  eligibility. Integration scenarios exercise real Snowflake concurrency, failure
+  handling, and controlled corrections alongside offline application tests.
+
+## Run locally
+
+Requires **Python 3.12**, [uv](https://docs.astral.sh/uv/), and access to the configured
+Snowflake reader identity and a published release. Data and credentials are not
+included; dashboard queries use Snowflake compute.
+
+```bash
+uv sync --locked --extra analytics
+uv run --extra analytics streamlit run app.py --server.address 127.0.0.1
+```
+
+Run the offline checks separately; live integration tests are opt-in:
+
+```bash
+uv run --extra analytics python -m unittest discover -s tests -v
+uv run --extra analytics ruff check .
+```
+
+## Code layout
+
+| Path | Purpose |
+| --- | --- |
+| [`src/airline_warehouse/`](src/airline_warehouse/) | Preparation, loading, refresh, publication, analytical SQL, and dashboard |
+| [`dbt/`](dbt/) | Warehouse models, data tests, and transformation lineage |
+| [`infra/ingestion/`](infra/ingestion/) | Terraform for private S3 storage and scoped IAM access |
+| [`sql/`](sql/) | Snowflake setup and publication-control schema |
+| [`tests/`](tests/) | Offline and explicitly enabled integration tests |
