@@ -20,6 +20,11 @@ def main(argv=None):
     p.add_argument("--month", required=True)
     p.add_argument("--expected-sha256", required=True, help="Selected source snapshot checksum")
     p.add_argument("--synthetic", action="store_true", help="Explicitly label test fixtures")
+    # Recovery is deliberately separate from refresh/retry and requires attendance.
+    p = sub.add_parser("recover-local", help="Reconcile exact own uncertain local work")
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--budget-state", type=Path, required=True)
+    p.add_argument("--funding-verified", action="store_true")
     p = sub.add_parser("prepare-weather", help="Prepare exact bounded local NOAA CSV imports")
     p.add_argument("--source", nargs=2, action="append", required=True, metavar=("PATH", "SHA256"))
     p.add_argument("--output", type=Path, required=True)
@@ -59,6 +64,12 @@ def main(argv=None):
                 synthetic=args.synthetic,
                 expected_sha256=args.expected_sha256,
             )
+        elif args.command == "recover-local":
+            if not args.funding_verified:
+                raise ValueError("Current funded recovery/orphan allowance is required")
+            from airline_warehouse.recovery import recover_local
+
+            result = recover_local(args.output, args.budget_state)
         elif args.command == "prepare-weather":
             from airline_warehouse.weather import prepare_weather
 

@@ -7,11 +7,13 @@ external Snowflake driver only inside this finite subprocess, never in the dashb
 import os
 import sys
 import time
+from pathlib import Path
 
 from airline_warehouse.deadlines import execute_bounded
+from airline_warehouse.execution import WorkJournal, producer_lock
 
 
-def main():
+def _run(journal):
     import snowflake.connector
     from dbt.cli.main import dbtRunner
     from snowflake.connector.cursor import SnowflakeCursor
@@ -22,7 +24,14 @@ def main():
 
     def execute(cursor, command, *args, **kwargs):
         return execute_bounded(
-            lambda sql, *a, **kw: original_execute(cursor, sql, *a, **kw),
+            lambda sql, *a, **kw: journal.execute(
+                lambda sql, *a, **kw: original_execute(cursor, sql, *a, **kw),
+                cursor,
+                cursor.connection.session_id,
+                sql,
+                *a,
+                **kw,
+            ),
             deadline,
             command,
             *args,
@@ -38,12 +47,29 @@ def main():
             network_timeout=min(30, remaining),
             socket_timeout=min(30, remaining),
         )
-        return original_connect(**kwargs)
+        connection = original_connect(**kwargs)
+        journal.session(connection, "builder")
+        return connection
 
     SnowflakeCursor.execute = execute
     snowflake.connector.connect = connect
     result = dbtRunner().invoke(sys.argv[1:])
     return 0 if result.success else 1
+
+
+def main():
+    journal = WorkJournal(os.environ["AIRLINE_WORK_JOURNAL"])
+    with producer_lock(journal.path):
+        Path(os.environ["AIRLINE_CHILD_READY"]).write_text(str(os.getpid()))
+        handshake_deadline = min(float(os.environ["AIRLINE_DBT_DEADLINE"]), time.monotonic() + 15)
+        go = Path(os.environ["AIRLINE_CHILD_GO"])
+        while not go.exists():
+            if time.monotonic() >= handshake_deadline:
+                raise TimeoutError("Parent never authorized child data work")
+            time.sleep(0.05)
+        if go.read_text() != str(os.getpid()):
+            raise ValueError("Child handshake identity mismatch")
+        return _run(journal)
 
 
 if __name__ == "__main__":

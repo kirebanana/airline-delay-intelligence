@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import tomllib
@@ -14,7 +13,7 @@ from pathlib import Path
 
 from airline_warehouse.budget import live_budget, mark_recovery
 from airline_warehouse.connection import connect
-from airline_warehouse.deadlines import DeadlineConnection
+from airline_warehouse.execution import WorkJournal, producer_lock, run_dbt_child, tracked
 from airline_warehouse.load import build_load_plan, check_validation
 
 BUCKET = "airline-bts-336805808138-us-east-2"
@@ -48,7 +47,7 @@ def processing_contract():
         if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
             digest.update(str(p.relative_to(project)).encode())
             digest.update(p.read_bytes())
-    for name in ("dbt_runner.py", "deadlines.py", "weather.py"):
+    for name in ("dbt_runner.py", "deadlines.py", "weather.py", "execution.py", "connection.py"):
         digest.update(name.encode())
         digest.update((Path(__file__).parent / name).read_bytes())
     digest.update((project.parent / "uv.lock").read_bytes())
@@ -56,7 +55,14 @@ def processing_contract():
 
 
 def build_candidate(
-    manifests: list[dict], output: Path, budget_path: Path, *, weather_path=None
+    manifests: list[dict],
+    output: Path,
+    budget_path: Path,
+    *,
+    weather_path=None,
+    journal=None,
+    whole_deadline=None,
+    work_id=None,
 ) -> dict:
     """Create-only build. Non-success never emits a sealed candidate descriptor."""
     output = Path(output).resolve()
@@ -74,6 +80,14 @@ def build_candidate(
     project = Path(__file__).resolve().parents[2] / "dbt"
     contract = processing_contract()
     output.mkdir(parents=True)
+    work_id = work_id or uuid.uuid4().hex
+    if journal is None:
+        journal = WorkJournal(output / "work.jsonl")
+        (output / "intent.json").write_text(
+            json.dumps(dict(kind="build", request_id=work_id, inputs=plan["inputs"], schema=schema))
+            + "\n"
+        )
+    producer = producer_lock(journal.path)
     env = os.environ.copy()
     config = tomllib.loads((Path.home() / ".snowflake/config.toml").read_text())
     env.update(
@@ -83,11 +97,18 @@ def build_candidate(
     )
     started = time.monotonic()
     sql_started = False
+    producer.__enter__()
     try:
-        with connect() as conn, live_budget(conn, budget_path) as remaining:
+        with (
+            connect(deadline=whole_deadline) as conn,
+            live_budget(
+                conn, budget_path, deadline=whole_deadline, work_id=work_id, operation_seconds=2700
+            ) as remaining,
+        ):
             deadline = time.monotonic() + remaining
             env["AIRLINE_DBT_DEADLINE"] = str(deadline)
-            with DeadlineConnection(conn, remaining, deadline=deadline).cursor() as cur:
+            bounded = tracked(conn, remaining, journal, "builder", deadline=deadline)
+            with bounded.cursor() as cur:
                 sql_started = True
                 cur.execute("USE SECONDARY ROLES NONE")
                 cur.execute(
@@ -115,10 +136,8 @@ def build_candidate(
             if weather_path is not None:
                 from airline_warehouse.weather import load_weather
 
-                weather, weather_table = load_weather(
-                    DeadlineConnection(conn, remaining, deadline=deadline), weather_path
-                )
-                with DeadlineConnection(conn, remaining, deadline=deadline).cursor() as cur:
+                weather, weather_table = load_weather(bounded, weather_path)
+                with bounded.cursor() as cur:
                     cur.execute(
                         f"CREATE VIEW AIRLINE_DB.{schema}.SELECTED_WEATHER AS "
                         f"SELECT record FROM {weather_table}"
@@ -141,15 +160,8 @@ def build_candidate(
                     {"expected_rows": plan["expected_rows"], "weather_enabled": weather is not None}
                 ),
             ]
-            result = subprocess.run(
-                command,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=max(1, deadline - time.monotonic()),
-            )
-            (output / "build.log").write_text(result.stdout + result.stderr)
-            if result.returncode:
+            returncode = run_dbt_child(command, env, output, deadline, journal)
+            if returncode:
                 results_path = output / "dbt/run_results.json"
                 statuses = (
                     {
@@ -202,6 +214,8 @@ def build_candidate(
             + "\n"
         )
         raise
+    finally:
+        producer.__exit__(None, None, None)
 
 
 def grant_candidate(connection, candidate: dict, role: str):

@@ -374,6 +374,66 @@ def reconcile(connection, token, release_id):
         raise Stale("Publication not proven committed; reconcile terminal work before recovery")
 
 
+def recover_terminal_authority(connection, intent):
+    """Trusted attended caller has proved all originating producers/sessions terminal.
+
+    Reconcile the exact run first; never clear a newer generation, even after a
+    successfully published old request. This is not an ordinary retirement path.
+    """
+    _hex(intent["attempt"])
+    _hex(intent["request_id"])
+    with _locked(connection, intent["target"]) as (cur, row):
+        cur.execute(
+            "SELECT * FROM AIRLINE_DB.CONTROL.RUNS WHERE target=%s AND request_id=%s",
+            (intent["target"], intent["request_id"]),
+        )
+        runs = _rows(cur)
+        if not runs:
+            if row["owner"] == intent["attempt"]:
+                raise Stale("Claim exists without matching singleton run")
+            return None  # claim was never committed; no authority is cleared
+        if len(runs) != 1 or runs[0]["attempt"] != intent["attempt"]:
+            raise Stale("Exact recovery run identity/cardinality mismatch")
+        run = runs[0]
+        if run["status"] == "PUBLISHED":
+            cur.execute(
+                "SELECT descriptor FROM AIRLINE_DB.CONTROL.RELEASES "
+                "WHERE target=%s AND release_id=%s",
+                (intent["target"], run["release_id"]),
+            )
+            releases = cur.fetchall()
+            if len(releases) != 1:
+                raise Stale("Committed run has no singleton release")
+            descriptor = json.loads(releases[0][0])
+            if any(
+                descriptor.get(k) != intent.get(k)
+                for k in ("inputs", "processing_contract", "weather")
+            ):
+                raise Stale("Committed dependency reconciliation mismatch")
+            return descriptor
+        if run["status"] in ("FAILED", "CANCELLED") and row["owner"] != intent["attempt"]:
+            return None  # idempotent attended replay, without touching newer authority
+        token = dict(
+            target=intent["target"],
+            request_id=intent["request_id"],
+            attempt=intent["attempt"],
+            fence=run["fence"],
+        )
+        _authority(row, token, allow_cancelled=True)
+        cur.execute(
+            "UPDATE AIRLINE_DB.CONTROL.RUNS SET status='FAILED' "
+            "WHERE target=%s AND request_id=%s AND attempt=%s AND status='RUNNING'",
+            (token["target"], token["request_id"], token["attempt"]),
+        )
+        if cur.rowcount != 1:
+            raise Stale("Recovery cannot retire an unexpected run status")
+        cur.execute(
+            "UPDATE AIRLINE_DB.CONTROL.TARGETS SET owner=NULL,request_id=NULL WHERE target=%s",
+            (token["target"],),
+        )
+        return None
+
+
 def request_result(connection, target, request_id):
     _target(target)
     _hex(request_id)

@@ -33,6 +33,8 @@ class FixtureReader:
                 "CATEGORY_ELIGIBLE": 4,
                 "CATEGORY_COMPLETE": 3,
                 "MISSING_CATEGORY_ROWS": 1,
+                "EXCLUDED_ARRIVAL_MINUTES": 20,
+                "ALLOCATION_MISMATCH_ROWS": 1,
                 "UNALLOCATED_MINUTES": 1345,
                 "RECOVERY_ELIGIBLE": 3,
                 "RECOVERED": 1,
@@ -116,6 +118,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Reported delay categories", headings)
         self.assertIn("Schedule-relative recovery", headings)
         self.assertTrue(any("1345" in str(w.value) for w in app.warning))
+        self.assertTrue(
+            any("20" in str(w.value) and "Excluded" in str(w.value) for w in app.markdown)
+        )
 
     def test_expired_token_stops_before_cached_results_without_fallback(self):
         class ExpiredReader(FixtureReader):

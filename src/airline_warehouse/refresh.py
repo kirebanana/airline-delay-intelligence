@@ -11,7 +11,7 @@ from pathlib import Path
 from airline_warehouse.analytics import relation
 from airline_warehouse.budget import live_budget, mark_recovery
 from airline_warehouse.connection import connect_as
-from airline_warehouse.deadlines import DeadlineConnection
+from airline_warehouse.execution import WorkJournal, producer_lock, tracked
 from airline_warehouse.load import execute_load, read_artifact
 from airline_warehouse.publication import (
     Busy,
@@ -104,11 +104,21 @@ def refresh(
         weather=weather,
     )
     (output / "intent.json").write_text(json.dumps(intent, indent=2) + "\n")
+    journal = WorkJournal(output / "work.jsonl")
+    producer = producer_lock(journal.path)
+    producer.__enter__()
+    whole_deadline = time.monotonic() + 2700
     token = None
     try:
-        with connect_as("publisher") as publisher, live_budget(publisher, budget_path) as remaining:
-            publisher = DeadlineConnection(publisher, remaining)
+        with (
+            connect_as("publisher", deadline=whole_deadline) as publisher,
+            live_budget(
+                publisher, budget_path, deadline=whole_deadline, work_id=request_id
+            ) as remaining,
+        ):
+            publisher = tracked(publisher, remaining, journal, "publisher")
             token = claim(publisher, target, request_id, attempt=attempt)
+            (output / "authority.json").write_text(json.dumps(token) + "\n")
             if token["status"] == "RUNNING" and token["attempt"] != attempt:
                 token = None
                 raise Busy("Request already running; duplicate does not own data-work authority")
@@ -127,25 +137,50 @@ def refresh(
         if descriptor is not None:
             result = dict(status="PUBLISHED", reused=True, descriptor=descriptor)
         else:
-            with connect_as("builder") as builder, live_budget(builder, budget_path) as remaining:
-                bounded = DeadlineConnection(builder, remaining)
+            with (
+                connect_as("builder", deadline=whole_deadline) as builder,
+                live_budget(
+                    builder,
+                    budget_path,
+                    deadline=whole_deadline,
+                    work_id=request_id,
+                    operation_seconds=2700,
+                ) as remaining,
+            ):
+                bounded = tracked(builder, remaining, journal, "builder")
                 if stage == "full":
                     for manifest in manifests:
                         execute_load(bounded, manifest, BUCKET, funding_verified=True)
             if candidate is None:
                 candidate = build_candidate(
-                    manifests, output / "candidate", budget_path, weather_path=weather_path
+                    manifests,
+                    output / "candidate",
+                    budget_path,
+                    weather_path=weather_path,
+                    journal=journal,
+                    whole_deadline=whole_deadline,
+                    work_id=request_id,
                 )
-            with connect_as("builder") as builder, live_budget(builder, budget_path) as remaining:
+            with (
+                connect_as("builder", deadline=whole_deadline) as builder,
+                live_budget(
+                    builder, budget_path, deadline=whole_deadline, work_id=request_id
+                ) as remaining,
+            ):
                 grant_candidate(
-                    DeadlineConnection(builder, remaining), candidate, "AIRLINE_PUBLISHER_ROLE"
+                    tracked(builder, remaining, journal, "builder"),
+                    candidate,
+                    "AIRLINE_PUBLISHER_ROLE",
                 )
             (output / "candidate-reference.json").write_text(json.dumps(candidate, indent=2) + "\n")
             with (
-                connect_as("publisher") as publisher,
-                live_budget(publisher, budget_path) as remaining,
+                connect_as("publisher", deadline=whole_deadline) as publisher,
+                live_budget(
+                    publisher, budget_path, deadline=whole_deadline, work_id=request_id
+                ) as remaining,
             ):
                 deadline = time.monotonic() + remaining
+                publisher = tracked(publisher, remaining, journal, "publisher", deadline=deadline)
                 try:
                     descriptor = publish(
                         publisher,
@@ -157,9 +192,9 @@ def refresh(
                     )
                 except CommitUnknown:
                     try:
-                        with connect_as("publisher") as fresh:
+                        with connect_as("publisher", deadline=deadline) as fresh:
                             descriptor = reconcile(
-                                DeadlineConnection(fresh, remaining, deadline=deadline),
+                                tracked(fresh, remaining, journal, "publisher", deadline=deadline),
                                 token,
                                 release_id,
                             )
@@ -176,10 +211,12 @@ def refresh(
         if token is not None and token.get("status") == "RUNNING":
             try:
                 with (
-                    connect_as("publisher") as publisher,
-                    live_budget(publisher, budget_path) as remaining,
+                    connect_as("publisher", deadline=whole_deadline) as publisher,
+                    live_budget(
+                        publisher, budget_path, deadline=whole_deadline, work_id=request_id
+                    ) as remaining,
                 ):
-                    retire(DeadlineConnection(publisher, remaining), token, "FAILED")
+                    retire(tracked(publisher, remaining, journal, "publisher"), token, "FAILED")
             except BaseException as error:
                 _record_uncertainty(output, budget_path, request_id, release_id, error)
                 raise RecoveryRequired(
@@ -190,3 +227,5 @@ def refresh(
     except BaseException as error:
         _record_uncertainty(output, budget_path, request_id, release_id, error)
         raise
+    finally:
+        producer.__exit__(None, None, None)

@@ -12,7 +12,9 @@ from airline_warehouse.load import check_account_monitor
 
 
 @contextmanager
-def live_budget(connection, state_path: Path):
+def live_budget(
+    connection, state_path: Path, *, deadline=None, work_id=None, operation_seconds=600
+):
     path = Path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with Path(str(path) + ".lock").open("a") as lock:
@@ -21,14 +23,22 @@ def live_budget(connection, state_path: Path):
         except BlockingIOError as error:
             raise ValueError("Batch budget already active in another local process") from error
         try:
-            with _accounted_budget(connection, path) as remaining:
+            with _accounted_budget(
+                connection,
+                path,
+                deadline=deadline,
+                work_id=work_id,
+                operation_seconds=operation_seconds,
+            ) as remaining:
                 yield remaining
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 @contextmanager
-def _accounted_budget(connection, state_path: Path):
+def _accounted_budget(
+    connection, state_path: Path, *, deadline=None, work_id=None, operation_seconds=600
+):
     path = Path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     state = (
@@ -47,9 +57,15 @@ def _accounted_budget(connection, state_path: Path):
     # may use the existing account monitor with a recovery reserve instead of an
     # invented batch credit/time cap. Every individual operation remains finite.
     maximum = state.get("max_elapsed_seconds", 2700)
-    remaining = 600 if maximum is None else maximum - state["elapsed_seconds"]
+    if not 1 <= operation_seconds <= 2700:
+        raise ValueError("Operation must fit the reviewed warehouse-stage bound")
+    remaining = operation_seconds if maximum is None else maximum - state["elapsed_seconds"]
     if remaining <= 0:
         raise ValueError("Approved 45-minute live-work budget exhausted")
+    if deadline is not None:
+        remaining = min(remaining, deadline - time.monotonic())
+        if remaining < 1:
+            raise TimeoutError("Whole-run absolute deadline exhausted")
     with connection.cursor() as cur:
         cur.execute("SHOW RESOURCE MONITORS LIKE 'AIRLINE_BUDGET'")
         names = [c[0].lower() for c in cur.description]
@@ -82,16 +98,21 @@ def _accounted_budget(connection, state_path: Path):
             raise ValueError("Warehouse safeguards differ from approved limits")
     start = time.monotonic()
     state["operation_active"] = True
+    state["active_work"] = work_id
+    state["operation_started_at"] = time.time()
     path.write_text(json.dumps(state, indent=2) + "\n")
     try:
-        yield min(remaining, 600)
+        yield min(remaining, operation_seconds)
     except BaseException as error:
         if not isinstance(error, ValueError):
             state.update(recovery_required=True, uncertain_error_type=type(error).__name__)
+            state["recovery_work"] = work_id
         raise
     finally:
         state["elapsed_seconds"] += time.monotonic() - start
         state.pop("operation_active", None)
+        state.pop("active_work", None)
+        state.pop("operation_started_at", None)
         state["operations"].append({"elapsed_seconds": time.monotonic() - start})
         path.write_text(json.dumps(state, indent=2) + "\n")
 
@@ -104,3 +125,47 @@ def mark_recovery(state_path: Path, **details):
         state = json.loads(path.read_text())
         state.update(recovery_required=True, **details)
         path.write_text(json.dumps(state, indent=2) + "\n")
+
+
+@contextmanager
+def attended_budget_recovery(state_path: Path, work_id):
+    """Own ledger scope/accounting and serialize proof-backed attended admission."""
+    path = Path(state_path)
+    with Path(str(path) + ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state = json.loads(path.read_text())
+        blocked = state.get("recovery_required") or state.get("operation_active")
+        if blocked and work_id not in (
+            state.get("active_work"),
+            state.get("recovery_work"),
+            state.get("uncertain_request"),
+        ):
+            raise ValueError("Budget uncertainty belongs to different/unidentified work")
+
+        def complete(proof_path):
+            proof = json.loads(Path(proof_path).read_text())
+            if (
+                proof.get("request_id") != work_id
+                or proof.get("execution") != "TERMINAL"
+                or proof.get("cleanup") != "COMPLETE"
+            ):
+                raise ValueError("Matching durable terminal proof required before admission")
+            if state.get("operation_active"):
+                start = state.get("operation_started_at")
+                if start is None:
+                    raise ValueError("Interrupted operation has no accounting start; no reset")
+                state["elapsed_seconds"] += max(0, time.time() - start)
+            for key in (
+                "recovery_required",
+                "operation_active",
+                "active_work",
+                "recovery_work",
+                "uncertain_request",
+                "uncertain_error_type",
+                "operation_started_at",
+            ):
+                state.pop(key, None)
+            state.setdefault("recoveries", []).append(str(proof_path))
+            path.write_text(json.dumps(state, indent=2) + "\n")
+
+        yield complete

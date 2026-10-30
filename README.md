@@ -9,6 +9,11 @@ including **24,732 Denver departures**. The focus is both useful analysis and a
 reproducible pipeline: preserving source data, handling corrections without double
 counting, and keeping incomplete refreshes out of the dashboard.
 
+**Current milestone (2026-10-30):** January is published with all six analytical
+areas and the complete DEN weather pilot. It is not yet the required 2023–2025
+baseline or final cloud-platform acceptance. See the [category/recovery notes](docs/secondary-analytics.md),
+[weather runbook](docs/weather.md) and [attended local recovery](docs/local-recovery.md).
+
 ## Analytics
 
 Explore arrival punctuality, cancellations, diversions, and departure delays by
@@ -21,6 +26,8 @@ The dashboard helps investigate questions such as:
 - Which carriers combine punctual arrivals with fewer cancellations?
 - Which airports and scheduled hours have higher departure-delay rates?
 - How does reliability differ between a route and its reverse direction?
+- How do reported delay allocations and schedule-relative recovery differ?
+- What scheduled weather context accompanies the fixed DEN/January investigation?
 
 Comparisons include eligible counts and small-group warnings. They describe
 historical performance—not predictions, passenger impact, or proof of causation.
@@ -42,7 +49,8 @@ archives are imported explicitly and prepared locally. All 119 source fields are
 preserved alongside file and row fingerprints. Snowflake loads the prepared data
 from private S3; each accepted artifact has its own RAW table.
 
-Five dbt models provide staging, date/airport/carrier dimensions, and a flight fact.
+Five core dbt models provide staging, date/airport/carrier dimensions, and a flight fact;
+two additional models preserve weather observations and matched scheduled-flight context.
 Each fact represents one selected source row, retaining marketing and operating
 carrier identities—not a passenger journey or a guaranteed unique aircraft movement.
 Snowflake calculates filtered rates and percentiles; the dashboard receives

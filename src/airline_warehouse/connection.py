@@ -3,15 +3,39 @@
 import os
 import re
 import stat
+import time
 import tomllib
 from pathlib import Path
 
+from airline_warehouse.deadlines import DeadlineConnection
 
-def connect(query_tag="airline:raw-ingest:v1"):
+
+def _login(params, deadline):
+    import snowflake.connector
+    from snowflake.connector.errors import OperationalError
+
+    # Only pre-return login transport failures retry; never replay workload SQL.
+    if deadline is None:
+        deadline = time.monotonic() + 30
+    for attempt in range(2):
+        remaining = int(deadline - time.monotonic())
+        if remaining < 1:
+            raise TimeoutError("Connection absolute deadline exhausted")
+        params.update(
+            login_timeout=min(15, remaining),
+            network_timeout=min(30, remaining),
+            socket_timeout=min(30, remaining),
+        )
+        try:
+            return snowflake.connector.connect(**params)
+        except OperationalError as error:
+            if attempt or error.errno not in (250001, 250003):
+                raise
+
+
+def connect(query_tag="airline:raw-ingest:v1", *, deadline=None):
     if not re.fullmatch(r"airline:[A-Za-z0-9:_-]{1,120}", query_tag):
         raise ValueError("Query tag must be a bounded project identifier")
-    import snowflake.connector
-
     path = Path.home() / ".snowflake/config.toml"
     config = tomllib.loads(path.read_text())["connections"]["airline"]
     expected = {
@@ -43,8 +67,8 @@ def connect(query_tag="airline:raw-ingest:v1"):
     # Never print/serialize credentials or passphrases. No admin role fallback.
     if "AIRLINE_KEY_PASSPHRASE" in os.environ:
         params["private_key_file_pwd"] = os.environ["AIRLINE_KEY_PASSPHRASE"]
-    conn = snowflake.connector.connect(**params)
-    with conn.cursor() as cur:
+    conn = _login(params, deadline)
+    with DeadlineConnection(conn, 600, deadline=deadline).cursor() as cur:
         cur.execute("USE SECONDARY ROLES NONE")
         cur.execute("SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_ROLE()")
         if cur.fetchone() != ("DC50202", "AWS_US_EAST_2", "AIRLINE_DEV_ROLE"):
@@ -53,37 +77,38 @@ def connect(query_tag="airline:raw-ingest:v1"):
     return conn
 
 
-def connect_as(kind: str):
+def connect_as(kind: str, *, deadline=None):
     """Separate service identities; never let a caller select an arbitrary role."""
     if kind == "builder":
-        return connect("airline:batch05-10:builder")
+        return connect("airline:batch05-10:builder", deadline=deadline)
     if kind not in ("publisher", "reader"):
         raise ValueError("Unknown workload identity")
-    import snowflake.connector
-
     name = "AIRLINE_" + kind.upper()
     key = Path.home() / ".snowflake/airline-analytics" / (kind + ".p8")
     if stat.S_IMODE(key.stat().st_mode) & 0o077:
         raise ValueError("Workload key must be owner-only")
-    conn = snowflake.connector.connect(
-        account="LMOOEWP-DQ15927",
-        user=name,
-        role=name + "_ROLE",
-        database="AIRLINE_DB",
-        warehouse="AIRLINE_DEV_WH",
-        authenticator="SNOWFLAKE_JWT",
-        private_key_file=str(key),
-        login_timeout=15,
-        network_timeout=30,
-        socket_timeout=30,
-        session_parameters={
-            "STATEMENT_TIMEOUT_IN_SECONDS": 600,
-            "STATEMENT_QUEUED_TIMEOUT_IN_SECONDS": 60,
-            "LOCK_TIMEOUT": 5,
-            "QUERY_TAG": "airline:batch05-10:" + kind,
-        },
+    conn = _login(
+        dict(
+            account="LMOOEWP-DQ15927",
+            user=name,
+            role=name + "_ROLE",
+            database="AIRLINE_DB",
+            warehouse="AIRLINE_DEV_WH",
+            authenticator="SNOWFLAKE_JWT",
+            private_key_file=str(key),
+            login_timeout=15,
+            network_timeout=30,
+            socket_timeout=30,
+            session_parameters={
+                "STATEMENT_TIMEOUT_IN_SECONDS": 600,
+                "STATEMENT_QUEUED_TIMEOUT_IN_SECONDS": 60,
+                "LOCK_TIMEOUT": 5,
+                "QUERY_TAG": "airline:batch05-10:" + kind,
+            },
+        ),
+        deadline,
     )
-    with conn.cursor() as cur:
+    with DeadlineConnection(conn, 600, deadline=deadline).cursor() as cur:
         cur.execute("USE SECONDARY ROLES NONE")
         cur.execute("SELECT CURRENT_ACCOUNT(),CURRENT_REGION(),CURRENT_ROLE(),CURRENT_USER()")
         if cur.fetchone() != ("DC50202", "AWS_US_EAST_2", name + "_ROLE", name):

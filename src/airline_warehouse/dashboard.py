@@ -367,6 +367,19 @@ def render(reader):
             f"{s['CATEGORY_COMPLETE']}; missing allocations: {s['MISSING_CATEGORY_ROWS']}. "
             "Cancelled/diverted rows and unknown arrival indicators are excluded."
         )
+        st.write(
+            "Excluded arrival-delay minutes on incomplete allocation rows: "
+            + (
+                "N/A (no known minutes)"
+                if s["EXCLUDED_ARRIVAL_MINUTES"] is None
+                else str(s["EXCLUDED_ARRIVAL_MINUTES"])
+            )
+            + f"; complete-subset allocation mismatches: {s['ALLOCATION_MISMATCH_ROWS']}."
+        )
+        if 0 < int(s["CATEGORY_COMPLETE"]) < minimum:
+            st.warning(
+                "Category subset is below the displayed sample-size threshold; inspect with care."
+            )
         st.caption(
             "Minute share = category minutes / all reported category minutes on the complete "
             "late-arrival subset—not a share of all arrival-delay minutes. Affected rate = "
@@ -382,6 +395,10 @@ def render(reader):
         )
         st.dataframe(secondary["cancellations"], hide_index=True)
         st.subheader("Schedule-relative recovery")
+        if 0 < int(s["RECOVERY_ELIGIBLE"]) < minimum:
+            st.warning(
+                "Recovery subset is below the displayed sample-size threshold; inspect with care."
+            )
         st.write(
             f"Eligible late departures: {s['RECOVERY_ELIGIBLE']}; "
             f"excluded scheduled rows: {int(s['SCHEDULED_ROWS']) - int(s['RECOVERY_ELIGIBLE'])}; "
