@@ -4,7 +4,7 @@ import datetime as dt
 import re
 from dataclasses import dataclass
 
-QUERY_VERSION = "primary-analytics-v2"
+QUERY_VERSION = "categories-recovery-v3"
 GROUPS = {
     "all": (),
     "carrier": ("marketing_carrier_id", "marketing_label"),
@@ -77,16 +77,7 @@ def query_metrics(
 ) -> list[dict]:
     cache_identity(descriptor, filters, group, minimum, limit)
     table = relation(descriptor, development=development)
-    conditions, parameters = ["flight_date>=%s", "flight_date<=%s"], [filters.start, filters.end]
-    if filters.carriers:
-        conditions.append(
-            "marketing_carrier_id IN (" + ",".join(["%s"] * len(filters.carriers)) + ")"
-        )
-        parameters.extend(filters.carriers)
-    for name, value in (("origin_id", filters.origin), ("destination_id", filters.destination)):
-        if value is not None:
-            conditions.append(name + "=%s")
-            parameters.append(value)
+    conditions, parameters = filter_predicate(filters)
     fields = GROUPS[group]
     leading = ", ".join(fields) + ", " if fields else ""
     grouping = " GROUP BY " + ", ".join(fields) if fields else ""
@@ -141,3 +132,87 @@ def filter_options(connection, descriptor: dict, *, development=False) -> dict:
         )
         airports = cur.fetchall()
     return {"start": start, "end": end, "carriers": carriers, "airports": airports}
+
+
+def filter_predicate(filters: Filters):
+    conditions = ["flight_date>=%s", "flight_date<=%s"]
+    parameters = [filters.start, filters.end]
+    if filters.carriers:
+        conditions.append(
+            "marketing_carrier_id IN (" + ",".join(["%s"] * len(filters.carriers)) + ")"
+        )
+        parameters.extend(filters.carriers)
+    for name, value in (("origin_id", filters.origin), ("destination_id", filters.destination)):
+        if value is not None:
+            conditions.append(name + "=%s")
+            parameters.append(value)
+    return conditions, parameters
+
+
+def query_secondary(connection, descriptor, filters, *, development=False):
+    """Filtered flight values -> compatible category subsets and signed recovery.
+
+    Eligibility, units, reason labels and histogram bands are dbt fields. Only
+    bounded aggregate results cross this seam; missing categories are not zero.
+    """
+    table = relation(descriptor, development=development)
+    conditions, parameters = filter_predicate(filters)
+    scope = f"WITH selected AS (SELECT * FROM {table} WHERE {' AND '.join(conditions)}) "
+
+    def read(sql):
+        with connection.cursor() as cur:
+            cur.execute(scope + sql, parameters)
+            return [
+                dict(zip([c[0] for c in cur.description], r, strict=True)) for r in cur.fetchall()
+            ]
+
+    summary = read("""SELECT COUNT(*) AS scheduled_rows,
+        COALESCE(COUNT_IF(category_eligible),0) AS category_eligible,
+        COALESCE(COUNT_IF(category_complete),0) AS category_complete,
+        COALESCE(COUNT_IF(category_eligible),0)-COALESCE(COUNT_IF(category_complete),0)
+            AS missing_category_rows,
+        SUM(IFF(category_eligible AND NOT category_complete,arrival_delay,NULL))
+            AS excluded_arrival_minutes,
+        COALESCE(SUM(unallocated_minutes),0) AS unallocated_minutes,
+        COALESCE(COUNT_IF(category_complete AND ABS(unallocated_minutes)>0.000001),0)
+            AS allocation_mismatch_rows,
+        SUM(reported_minutes) AS reported_category_minutes,
+        SUM(IFF(category_complete,arrival_delay,NULL)) AS complete_arrival_minutes,
+        COALESCE(COUNT_IF(recovery_eligible),0) AS recovery_eligible,
+        COALESCE(COUNT_IF(cancelled=0 AND diverted=0 AND departure_delay>=15
+            AND arrival_delay IS NULL),0) AS recovery_missing_arrival,
+        COALESCE(COUNT_IF(cancelled=0 AND diverted=0 AND departure_delay IS NULL),0)
+            AS recovery_missing_departure,
+        COALESCE(COUNT_IF(recovered_below_threshold),0) AS recovered,
+        COALESCE(COUNT_IF(recovered_below_threshold),0)::DOUBLE/
+            NULLIF(COUNT_IF(recovery_eligible),0) AS recovery_share,
+        AVG(signed_improvement) AS improvement_mean,
+        PERCENTILE_CONT(0.5) WITHIN GROUP(ORDER BY signed_improvement) AS improvement_median,
+        PERCENTILE_CONT(0.9) WITHIN GROUP(ORDER BY signed_improvement) AS improvement_p90
+        FROM selected""")[0]
+    categories = []
+    for label, field in (
+        ("Carrier", "carrier_minutes"),
+        ("Weather", "weather_minutes"),
+        ("NAS", "nas_minutes"),
+        ("Security", "security_minutes"),
+        ("Late aircraft", "late_aircraft_minutes"),
+    ):
+        row = read(f"""SELECT SUM(IFF(category_complete,{field},NULL)) AS reported_minutes,
+            COALESCE(COUNT_IF(category_complete AND {field}>0),0) AS affected_rows,
+            COALESCE(COUNT_IF(category_complete),0) AS eligible_complete_late_arrivals,
+            affected_rows::DOUBLE/NULLIF(eligible_complete_late_arrivals,0) AS affected_rate,
+            SUM(IFF(category_complete,{field},NULL))::DOUBLE/
+                NULLIF(SUM(selected.reported_minutes),0) AS minute_share
+            FROM selected""")[0]
+        categories.append({"CATEGORY": label, **row})
+    return {
+        "summary": summary,
+        "categories": categories,
+        "cancellations": read("""SELECT cancellation_reason,COUNT(*) AS cancelled_rows,
+            COUNT(*)::DOUBLE/NULLIF(SUM(COUNT(*)) OVER(),0) AS cancelled_share
+            FROM selected WHERE cancelled=1 GROUP BY cancellation_reason
+            ORDER BY cancelled_rows DESC"""),
+        "distribution": read("""SELECT recovery_band,COUNT(*) AS eligible_rows
+            FROM selected WHERE recovery_eligible GROUP BY recovery_band ORDER BY recovery_band"""),
+    }

@@ -1,0 +1,17 @@
+version: 2
+exposures:
+  - name: local_airline_delay_dashboard
+    type: dashboard
+    maturity: low
+    description: >
+      Local Streamlit: carrier reliability, scheduled-time patterns, origin/ordered
+      routes, reported categories and schedule-relative recovery. The Python reader
+      filters released flight-grain inputs before final counts and exact quantiles.
+      Publication is a separate frozen validation/clone operation, not a dbt model.
+    depends_on:
+      - ref('fact_flights')
+      - ref('dim_date')
+      - ref('dim_airport')
+      - ref('dim_carrier')
+    owner:
+      name: Project owner

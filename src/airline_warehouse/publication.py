@@ -195,6 +195,14 @@ def _validate_frozen(connection, schema, candidate):
         cur.execute(derived)
         if cur.fetchone() is not None:
             raise ValueError("Frozen derived metric/source reconciliation failed")
+        secondary = (
+            (root / "dbt/tests/secondary_integrity.sql")
+            .read_text()
+            .replace("{{ ref('fact_flights') }}", f"AIRLINE_DB.{schema}.FACT_FLIGHTS")
+        )
+        cur.execute(secondary)
+        if cur.fetchone() is not None:
+            raise ValueError("Frozen category/recovery reconciliation failed")
         cur.execute(sql)
         if cur.fetchone() is not None:
             raise ValueError("Frozen critical quality contract failed")
@@ -295,6 +303,8 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
         sealed=True,
         published_at=published_at,
     )
+    if candidate.get("analytical_contract"):
+        descriptor["analytical_contract"] = candidate["analytical_contract"]
     with _locked(connection, token["target"]) as (cur, row):
         _authority(row, token)
         cur.execute(

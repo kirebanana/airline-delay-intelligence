@@ -130,7 +130,11 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
             if result.returncode:
                 results_path = output / "dbt/run_results.json"
                 statuses = (
-                    {r["status"] for r in json.loads(results_path.read_text())["results"]}
+                    {
+                        r["status"]
+                        for r in json.loads(results_path.read_text())["results"]
+                        if not r["unique_id"].startswith("exposure.")
+                    }
                     if results_path.exists()
                     else set()
                 )
@@ -142,6 +146,7 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
             statuses = {
                 r["status"]
                 for r in json.loads((output / "dbt/run_results.json").read_text())["results"]
+                if not r["unique_id"].startswith("exposure.")
             }
             if not statuses or not statuses <= {"pass", "success"}:
                 raise RecoveryRequired("Incomplete dbt outcome; refuse to seal candidate")
@@ -149,6 +154,7 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
             **plan,
             "processing_contract": contract,
             "sealed": True,
+            "analytical_contract": "secondary-v1",
             "tables": ["FACT_FLIGHTS", "DIM_DATE", "DIM_AIRPORT", "DIM_CARRIER"],
             "built_at": dt.datetime.now(dt.UTC).isoformat(),
             "elapsed_seconds": time.monotonic() - started,

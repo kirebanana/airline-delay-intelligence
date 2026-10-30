@@ -1,6 +1,7 @@
 select s.*, d.date_key, d.weekday, d.month_start,
     o.airport_code as origin_label, a.airport_code as destination_label,
-    m.carrier_code as marketing_label, p.carrier_code as operating_label
+    m.carrier_code as marketing_label, p.carrier_code as operating_label,
+    {{ secondary_fields() }}
 from {{ ref('stg_flights') }} s
 left join {{ ref('dim_date') }} d on s.flight_date=d.date_key
 left join {{ ref('dim_airport') }} o on s.origin_id=o.airport_id

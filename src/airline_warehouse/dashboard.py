@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from airline_warehouse.analytics import filter_options, query_metrics, relation
+from airline_warehouse.analytics import filter_options, query_metrics, query_secondary, relation
 from airline_warehouse.connection import connect_as
 
 
@@ -18,6 +18,11 @@ def cached_metrics(identity, descriptor, filters, group, minimum, _reader):
 @st.cache_data(ttl=15, max_entries=16, show_spinner=False)
 def cached_options(identity, descriptor, _reader):
     return _reader.options(descriptor)
+
+
+@st.cache_data(ttl=900, max_entries=256, show_spinner=False)
+def cached_secondary(identity, descriptor, filters, _reader):
+    return _reader.secondary(descriptor, filters)
 
 
 class Reader:
@@ -55,13 +60,21 @@ class Reader:
             development=descriptor.get("development", False),
         )
 
+    def secondary(self, descriptor, filters):
+        return query_secondary(
+            self.connection,
+            descriptor,
+            filters,
+            development=descriptor.get("development", False),
+        )
+
 
 def render(reader):
     import pandas as pd
     import streamlit as st
 
     from airline_warehouse.analytics import Filters, cache_identity
-    from airline_warehouse.dashboard import cached_metrics, cached_options
+    from airline_warehouse.dashboard import cached_metrics, cached_options, cached_secondary
 
     st.title("Airline Delay Intelligence")
     try:
@@ -266,6 +279,69 @@ def render(reader):
         "Descriptive comparisons reflect carrier, route and schedule mix; "
         "no causality or fairness adjustment."
     )
+    # Old descriptors remain readable but do not pretend to contain new model fields.
+    if descriptor.get("analytical_contract") == "secondary-v1" or descriptor.get("development"):
+        try:
+            reader.validate(descriptor)
+            secondary = cached_secondary(
+                cache_identity(descriptor, filters, "all", minimum, 500),
+                descriptor,
+                filters,
+                reader,
+            )
+        except Exception:
+            st.error("Secondary results unavailable. Reload; no release fallback was used.")
+            st.stop()
+        s = secondary["summary"]
+        st.subheader("Reported delay categories")
+        st.write(
+            f"Late ordinary arrivals: {s['CATEGORY_ELIGIBLE']}; complete five-category subset: "
+            f"{s['CATEGORY_COMPLETE']}; missing allocations: {s['MISSING_CATEGORY_ROWS']}. "
+            "Cancelled/diverted rows and unknown arrival indicators are excluded."
+        )
+        st.caption(
+            "Minute share = category minutes / all reported category minutes on the complete "
+            "late-arrival subset—not a share of all arrival-delay minutes. Affected rate = "
+            "positive allocations / complete late arrivals. Categories overlap; rates need not "
+            "sum to 100%. These are reported attributions, not proven causes; Weather is not "
+            "every weather-associated disruption."
+        )
+        if s["UNALLOCATED_MINUTES"]:
+            st.warning(f"Unallocated arrival-delay minutes: {s['UNALLOCATED_MINUTES']}; preserved.")
+        st.dataframe(secondary["categories"], hide_index=True)
+        st.write(
+            "Cancellation reasons — counts and shares of cancelled rows only; unknowns retained."
+        )
+        st.dataframe(secondary["cancellations"], hide_index=True)
+        st.subheader("Schedule-relative recovery")
+        st.write(
+            f"Eligible late departures: {s['RECOVERY_ELIGIBLE']}; "
+            f"excluded scheduled rows: {int(s['SCHEDULED_ROWS']) - int(s['RECOVERY_ELIGIBLE'])}; "
+            f"arrived below 15 minutes late: {s['RECOVERED']}."
+        )
+        value = s["RECOVERY_SHARE"]
+        st.metric(
+            "Recovered below 15 minutes / eligible late departures",
+            "N/A" if value is None else f"{float(value):.1%}",
+        )
+        for col, (label, field) in zip(
+            st.columns(3),
+            (
+                ("Mean improvement", "IMPROVEMENT_MEAN"),
+                ("Median improvement", "IMPROVEMENT_MEDIAN"),
+                ("Exact p90 improvement", "IMPROVEMENT_P90"),
+            ),
+            strict=True,
+        ):
+            value = s[field]
+            col.metric(label, "N/A" if value is None else f"{float(value):.1f} min")
+        st.dataframe(secondary["distribution"], hide_index=True)
+        st.caption(
+            "Ordinary noncancelled/nondiverted completions departing ≥15 minutes late, "
+            "with both signed delays known. Improvement = departure delay − arrival delay; "
+            "zero/negative values remain. Positive improvement is not proof of faster flying "
+            "or a causal intervention."
+        )
     with st.expander("Methodology and data quality"):
         st.write(
             "Arrival eligibility excludes cancellations/diversions and unknown arrival indicators. "
@@ -273,7 +349,7 @@ def render(reader):
             "with known indicators. Exactly 15 minutes is delayed. Rates use aggregate counts; "
             "quantiles use eligible values. Unknown cancellation/diversion flags block acceptance. "
             "Historical source codes/sequence IDs remain on facts; display labels describe "
-            "the selected scope. Weather/categories/recovery are later tickets."
+            "the selected scope. Weather is a fixed DEN/local-January pilot, not national context."
         )
 
 

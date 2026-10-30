@@ -26,6 +26,26 @@ class FixtureReader:
     def validate(self, descriptor):
         return None
 
+    def secondary(self, descriptor, filters):
+        return {
+            "summary": {
+                "SCHEDULED_ROWS": 10,
+                "CATEGORY_ELIGIBLE": 4,
+                "CATEGORY_COMPLETE": 3,
+                "MISSING_CATEGORY_ROWS": 1,
+                "UNALLOCATED_MINUTES": 1345,
+                "RECOVERY_ELIGIBLE": 3,
+                "RECOVERED": 1,
+                "RECOVERY_SHARE": 1 / 3,
+                "IMPROVEMENT_MEAN": 7,
+                "IMPROVEMENT_MEDIAN": 6,
+                "IMPROVEMENT_P90": 13.2,
+            },
+            "categories": [],
+            "cancellations": [],
+            "distribution": [],
+        }
+
     def options(self, descriptor):
         return {
             "start": dt.date(2025, 1, 1),
@@ -65,6 +85,14 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_categories_and_recovery_explain_populations_without_causal_claims(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        self.assertFalse(app.exception)
+        headings = [h.value for h in app.subheader]
+        self.assertIn("Reported delay categories", headings)
+        self.assertIn("Schedule-relative recovery", headings)
+        self.assertTrue(any("1345" in str(w.value) for w in app.warning))
+
     def test_expired_token_stops_before_cached_results_without_fallback(self):
         class ExpiredReader(FixtureReader):
             def __init__(self):

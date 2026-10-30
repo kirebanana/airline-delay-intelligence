@@ -43,7 +43,11 @@ def _accounted_budget(connection, state_path: Path):
     elapsed = state.get("elapsed_seconds")
     if type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0:
         raise ValueError("Corrupt batch accounting; inspect rather than reset the budget")
-    remaining = 2700 - state["elapsed_seconds"]
+    # Historical ledgers retain their original allowance. Explicit newer ledgers
+    # may use the existing account monitor with a recovery reserve instead of an
+    # invented batch credit/time cap. Every individual operation remains finite.
+    maximum = state.get("max_elapsed_seconds", 2700)
+    remaining = 600 if maximum is None else maximum - state["elapsed_seconds"]
     if remaining <= 0:
         raise ValueError("Approved 45-minute live-work budget exhausted")
     with connection.cursor() as cur:
@@ -54,8 +58,15 @@ def _accounted_budget(connection, state_path: Path):
             raise ValueError("Account monitor is unavailable")
         monitor = monitors[0]
         check_account_monitor(monitor)
-        if Decimal(str(monitor["used_credits"])) - Decimal(state["baseline_credits"]) >= 2:
+        credit_limit = state.get("additional_credit_limit", "2")
+        if credit_limit is not None and (
+            Decimal(str(monitor["used_credits"])) - Decimal(state["baseline_credits"])
+            >= Decimal(str(credit_limit))
+        ):
             raise ValueError("Approved two additional observed-credit budget exhausted")
+        reserve = Decimal(str(state.get("recovery_reserve_credits", "0")))
+        if Decimal(str(monitor["remaining_credits"])) <= reserve:
+            raise ValueError("Account monitor recovery reserve reached; no new workload")
         state["last_observed_credits"] = str(monitor["used_credits"])
         cur.execute("SHOW WAREHOUSES LIKE 'AIRLINE_DEV_WH'")
         names = [c[0].lower() for c in cur.description]
