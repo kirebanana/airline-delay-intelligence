@@ -11,7 +11,10 @@ select r.*,
     try_to_double(nullif("DepDel15",'')) as departure_delayed,
     try_to_double(nullif("ArrDelay",'')) as arrival_delay,
     try_to_double(nullif("DepDelay",'')) as departure_delay,
-    case when regexp_like("CRSDepTime",'[0-9]{1,4}')
+    -- 24 is a separate SOURCE-2400 clock bucket, not an inferred next-day anchor.
+    -- Reporting date remains unchanged. The DEN pilot has its own strict anchors.
+    case when "CRSDepTime"='2400' then 24
+         when regexp_like("CRSDepTime",'[0-9]{1,4}')
          and try_to_number("CRSDepTime") between 0 and 2359
          and mod(try_to_number("CRSDepTime"),100) between 0 and 59
          then floor(try_to_number("CRSDepTime")/100)::integer end as scheduled_local_hour,

@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 
+from airline_warehouse.deadlines import DeadlineConnection
 from airline_warehouse.load import check_account_monitor
 
 
@@ -66,7 +67,7 @@ def _accounted_budget(
         remaining = min(remaining, deadline - time.monotonic())
         if remaining < 1:
             raise TimeoutError("Whole-run absolute deadline exhausted")
-    with connection.cursor() as cur:
+    with DeadlineConnection(connection, min(600, remaining), deadline=deadline).cursor() as cur:
         cur.execute("SHOW RESOURCE MONITORS LIKE 'AIRLINE_BUDGET'")
         names = [c[0].lower() for c in cur.description]
         monitors = [dict(zip(names, r, strict=True)) for r in cur.fetchall()]
@@ -96,6 +97,10 @@ def _accounted_budget(
             )
         ):
             raise ValueError("Warehouse safeguards differ from approved limits")
+    if deadline is not None:
+        remaining = min(remaining, deadline - time.monotonic())
+        if remaining < 1:
+            raise TimeoutError("Whole-run absolute deadline exhausted during preflight")
     start = time.monotonic()
     state["operation_active"] = True
     state["active_work"] = work_id

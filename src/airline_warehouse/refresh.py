@@ -24,6 +24,7 @@ from airline_warehouse.publication import (
     reuse_active,
 )
 from airline_warehouse.warehouse import (
+    BASELINE_MONTHS,
     BUCKET,
     RecoveryRequired,
     build_candidate,
@@ -89,6 +90,14 @@ def refresh(
             or candidate.get("weather") != weather
         ):
             raise ValueError("Candidate dependency is incompatible with selected inputs/processing")
+    if target == "january" and any(
+        kind != "official-local-import" for kind in plan["source_kinds"].values()
+    ):
+        raise ValueError(
+            "Synthetic inputs may only use isolated test targets, never the presenter release"
+        )
+    if set(plan["inputs"]) == BASELINE_MONTHS and weather is None:
+        raise ValueError("A complete baseline requires its compatible fixed weather dependency")
     output, budget_path = Path(output), Path(budget_path)
     output.mkdir(parents=True, exist_ok=False)
     release_id = uuid.uuid4().hex

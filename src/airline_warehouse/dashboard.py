@@ -96,6 +96,7 @@ def render(reader):
         cached_secondary,
         cached_weather,
     )
+    from airline_warehouse.warehouse import BASELINE_MONTHS
 
     st.title("Airline Delay Intelligence")
     try:
@@ -120,7 +121,13 @@ def render(reader):
     if descriptor.get("development"):
         st.warning("DEVELOPMENT — UNPUBLISHED. Not a validated immutable release.")
     else:
-        st.caption("Validated first-month release; not final 36-month project acceptance.")
+        complete = set(descriptor["inputs"]) == BASELINE_MONTHS
+        st.caption(
+            "Validated 2023–2025 baseline; cloud/platform final acceptance remains separate."
+            if complete
+            else f"Validated partial baseline ({len(descriptor['inputs'])} selected month(s)); "
+            "not final 36-month project acceptance."
+        )
     st.caption(
         f"Coverage: {options['start']} to {options['end']}; "
         "marketing-table source rows, not passengers."
@@ -287,6 +294,8 @@ def render(reader):
                     "weekday": "WEEKDAY",
                     "hour": "SCHEDULED_LOCAL_HOUR",
                 }[group]
+                if group == "hour" and row[field] == 24:
+                    return "Source 2400 midnight (date not inferred)"
                 return str(row[field])
 
             chart = chart.copy()
@@ -297,6 +306,9 @@ def render(reader):
             )
     st.caption(
         "Local scheduled hours—not actual departure/UTC cohorts. A→B differs from B→A. "
+        "Source clock 2400 is a separate midnight bucket, "
+        "not a 24th hour or a next-day conversion; "
+        "source reporting dates stay unchanged. "
         "Descriptive comparisons reflect carrier, route and schedule mix; "
         "no causality or fairness adjustment."
     )

@@ -218,6 +218,26 @@ def _validate_frozen(connection, schema, candidate):
         cur.execute(f"SELECT loaded_artifact_id,COUNT(*) FROM {table} GROUP BY 1")
         if {r[0] for r in cur.fetchall()} != set(candidate["inputs"].values()):
             raise ValueError("Frozen selected artifact identity mismatch")
+        if set(candidate.get("input_counts", {})) != set(candidate["inputs"]) or set(
+            candidate.get("input_sources", {})
+        ) != set(candidate["inputs"]):
+            raise ValueError("Candidate lacks exact per-month source/count dependencies")
+        cur.execute(
+            f'SELECT LEFT("FlightDate",7),loaded_artifact_id,"SOURCE_SHA256",'
+            'COUNT(*),COUNT(DISTINCT "SOURCE_ROW_NUMBER"),MIN("SOURCE_ROW_NUMBER"),'
+            f'MAX("SOURCE_ROW_NUMBER") FROM {table} GROUP BY 1,2,3'
+        )
+        grouped = cur.fetchall()
+        if len(grouped) != len(candidate["inputs"]):
+            raise ValueError("Frozen per-month source-group cardinality mismatch")
+        actual = {r[0]: tuple(r[1:]) for r in grouped}
+        expected = {
+            month: (artifact, candidate["input_sources"][month], n, n, 1, n)
+            for month, artifact in candidate["inputs"].items()
+            for n in [candidate["input_counts"][month]]
+        }
+        if actual != expected:
+            raise ValueError("Frozen exact per-month selected source/count reconciliation failed")
         for dimension, key, refs in (
             ("DIM_DATE", "date_key", ("flight_date",)),
             ("DIM_AIRPORT", "airport_id", ("origin_id", "destination_id")),
@@ -252,14 +272,23 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
     reconciliation and terminal-query inspection; never replay this create-only job.
     """
     from airline_warehouse.analytics import relation
+    from airline_warehouse.warehouse import BASELINE_MONTHS
 
     _hex(release_id)
     if not 1 <= timeout_seconds <= 300:
         raise ValueError("Publication timeout must fit the approved five-minute bound")
+    relation(candidate, development=True)
+    if set(candidate.get("inputs", {})) == BASELINE_MONTHS and not candidate.get("weather"):
+        raise ValueError("A complete baseline requires its validated fixed weather dependency")
+    if token["target"] == "january" and (
+        not candidate.get("source_kinds")
+        or set(candidate["source_kinds"]) != set(candidate.get("inputs", {}))
+        or any(kind != "official-local-import" for kind in candidate["source_kinds"].values())
+    ):
+        raise ValueError("Synthetic/unclassified sources cannot replace the presenter release")
     with connection.cursor() as cur:
         cur.execute(f"ALTER SESSION SET QUERY_TAG='airline:publication:{release_id}'")
     connection = DeadlineConnection(connection, timeout_seconds, evidence_path)
-    relation(candidate, development=True)
     if type(candidate.get("expected_rows")) is not int or candidate["expected_rows"] <= 0:
         raise ValueError("Invalid candidate population")
     schema = "RELEASE_" + release_id[:24].upper()
@@ -312,6 +341,11 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
     descriptor = {
         k: candidate[k] for k in ("inputs", "expected_rows", "processing_contract", "built_at")
     }
+    descriptor.update(
+        input_counts=candidate["input_counts"], input_sources=candidate["input_sources"]
+    )
+    if candidate.get("source_kinds"):
+        descriptor["source_kinds"] = candidate["source_kinds"]
     descriptor.update(
         schema=schema,
         target=token["target"],

@@ -14,6 +14,14 @@ from airline_warehouse.prepare import PreparationError, prepare
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="airline")
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("acquire", help="Acquire one explicit official BTS marketing month")
+    p.add_argument(
+        "--ranged",
+        action="store_true",
+        help="Explicit strong-validator bounded byte-range transport",
+    )
+    p.add_argument("--month", required=True)
+    p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("prepare", help="Validate an explicit official local archive import")
     p.add_argument("--archive", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
@@ -56,7 +64,11 @@ def main(argv=None):
             )
     args = parser.parse_args(argv)
     try:
-        if args.command == "prepare":
+        if args.command == "acquire":
+            from airline_warehouse.acquire import acquire_month
+
+            result = acquire_month(args.month, args.output, ranged=args.ranged)
+        elif args.command == "prepare":
             result = prepare(
                 args.archive,
                 args.output,

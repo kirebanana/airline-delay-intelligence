@@ -1,5 +1,6 @@
 -- Missing allocations are disclosed exclusions; malformed/negative or new complete
--- reconciliation failures block. The exception is exactly the reviewed source row.
+-- reconciliation failures block. Exceptions identify exact independently reviewed
+-- source rows; see docs/baseline.md. No allocation or outcome value is rewritten.
 select flight_key from {{ ref('fact_flights') }}
 where category_eligible is distinct from (cancelled=0 and diverted=0 and arrival_delayed=1)
  or carrier_minutes is distinct from try_to_double(nullif("CarrierDelay",''))
@@ -19,9 +20,12 @@ where category_eligible is distinct from (cancelled=0 and diverted=0 and arrival
     carrier_minutes+weather_minutes+nas_minutes+security_minutes+late_aircraft_minutes,null)
  or unallocated_minutes is distinct from iff(category_complete,arrival_delay-reported_minutes,null)
  or (category_complete and (arrival_delay is null or abs(unallocated_minutes)>0.000001)
-     and not ("SOURCE_SHA256"='7a96466f2165b93ac1a064422c960e9b3089c2cc8a70c2cbabc8fde1c8b0af31'
+     and not (("SOURCE_SHA256"='7a96466f2165b93ac1a064422c960e9b3089c2cc8a70c2cbabc8fde1c8b0af31'
           and "SOURCE_ROW_NUMBER"=432835
-          and "SOURCE_ROW_SHA256"='6f5f8a19f8c3d65e1e0a064a5660985b4c13206709083c7cc41f7eefe6a9699c'))
+          and "SOURCE_ROW_SHA256"='6f5f8a19f8c3d65e1e0a064a5660985b4c13206709083c7cc41f7eefe6a9699c')
+          or ("SOURCE_SHA256"='68c5a96d28c6193a85e7257ba131faf0112b810c54e3a9fc38ff61cb66b5bfa0'
+          and "SOURCE_ROW_NUMBER"=416811
+          and "SOURCE_ROW_SHA256"='276f51920a74634e164decea6802afb1176382e87e28c3d5429ef66daa98b849')))
  or recovery_eligible is distinct from
     (cancelled=0 and diverted=0 and departure_delay>=15 and arrival_delay is not null)
  or signed_improvement is distinct from iff(recovery_eligible,departure_delay-arrival_delay,null)

@@ -17,6 +17,9 @@ from airline_warehouse.execution import WorkJournal, producer_lock, run_dbt_chil
 from airline_warehouse.load import build_load_plan, check_validation
 
 BUCKET = "airline-bts-336805808138-us-east-2"
+BASELINE_MONTHS = frozenset(
+    f"{year}-{month:02d}" for year in range(2023, 2026) for month in range(1, 13)
+)
 
 
 class RecoveryRequired(RuntimeError):
@@ -29,20 +32,33 @@ def candidate_plan(manifests: list[dict], schema: str) -> dict:
     if not manifests or len(manifests) > 36:
         raise ValueError("Select explicit bounded input months")
     inputs, tables, rows = {}, [], 0
+    counts, sources, kinds = {}, {}, {}
     for manifest in manifests:
         load = build_load_plan(manifest, BUCKET)
         month = manifest["month"]
         if month in inputs:
             raise ValueError("Select exactly one accepted artifact per month")
         inputs[month] = manifest["loaded_artifact_id"]
+        counts[month] = manifest["rows"]
+        sources[month] = manifest["source_sha256"]
+        kinds[month] = manifest["source_kind"]
         tables.append(load["table"])
         rows += manifest["rows"]
-    return {"schema": schema, "inputs": inputs, "raw_tables": tables, "expected_rows": rows}
+    return {
+        "schema": schema,
+        "inputs": inputs,
+        "raw_tables": tables,
+        "expected_rows": rows,
+        "input_counts": counts,
+        "input_sources": sources,
+        "source_kinds": kinds,
+    }
 
 
 def processing_contract():
     project = Path(__file__).resolve().parents[2] / "dbt"
     digest = hashlib.sha256()
+    digest.update(b"selected-month-counts-and-kind-v3")
     for p in sorted(project.rglob("*")):
         if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
             digest.update(str(p.relative_to(project)).encode())

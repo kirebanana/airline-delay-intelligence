@@ -28,7 +28,8 @@ where f.flight_key is distinct from
         (try_to_double(f."Cancelled")=0 and try_to_double(f."Diverted")=0
          and try_to_double(nullif(f."ArrDelay",'')) is not null)
  or f.scheduled_local_hour is distinct from
-        (case when regexp_like(f."CRSDepTime",'[0-9]{1,4}')
+        (case when f."CRSDepTime"='2400' then 24
+         when regexp_like(f."CRSDepTime",'[0-9]{1,4}')
          and try_to_number(f."CRSDepTime") between 0 and 2359
          and mod(try_to_number(f."CRSDepTime"),100) between 0 and 59
          then floor(try_to_number(f."CRSDepTime")/100)::integer end)
