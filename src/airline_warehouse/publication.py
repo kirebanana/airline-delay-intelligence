@@ -237,7 +237,9 @@ def _validate_frozen(connection, schema, candidate):
                     raise ValueError("Frozen relationship contract failed")
         cur.execute(f"SHOW TABLES IN SCHEMA AIRLINE_DB.{schema}")
         tables = _rows(cur)
-        if len(tables) != 4 or any(
+        from airline_warehouse.warehouse import candidate_tables
+
+        if len(tables) != len(candidate_tables(candidate)) or any(
             t["kind"] != "TRANSIENT" or str(t["retention_time"]) != "1" for t in tables
         ):
             raise ValueError("Frozen lifecycle contract failed")
@@ -270,12 +272,18 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
             raise Stale("Release identity already used; reconcile instead of replay")
     with connection.cursor() as cur:
         cur.execute(f"CREATE TRANSIENT SCHEMA AIRLINE_DB.{schema} DATA_RETENTION_TIME_IN_DAYS=1")
-        for table in ("FACT_FLIGHTS", "DIM_DATE", "DIM_AIRPORT", "DIM_CARRIER"):
+        from airline_warehouse.warehouse import candidate_tables
+
+        for table in candidate_tables(candidate):
             cur.execute(
                 f"CREATE TRANSIENT TABLE AIRLINE_DB.{schema}.{table} "
                 f"CLONE AIRLINE_DB.{candidate['schema']}.{table}"
             )
     _validate_frozen(connection, schema, candidate)
+    if candidate.get("weather"):
+        from airline_warehouse.weather import validate_frozen_weather
+
+        validate_frozen_weather(connection, schema, candidate["weather"])
     with connection.cursor() as cur:
         cur.execute(f"GRANT USAGE ON SCHEMA AIRLINE_DB.{schema} TO ROLE AIRLINE_READER_ROLE")
         for view, table in (
@@ -291,6 +299,14 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
             cur.execute(
                 f"GRANT SELECT ON VIEW AIRLINE_DB.{schema}.{view} TO ROLE AIRLINE_READER_ROLE"
             )
+        if candidate.get("weather"):
+            cur.execute(
+                f"CREATE VIEW AIRLINE_DB.{schema}.WEATHER AS "
+                f"SELECT * FROM AIRLINE_DB.{schema}.DEN_WEATHER"
+            )
+            cur.execute(
+                f"GRANT SELECT ON VIEW AIRLINE_DB.{schema}.WEATHER TO ROLE AIRLINE_READER_ROLE"
+            )
         cur.execute("SELECT CURRENT_TIMESTAMP()")
         published_at = cur.fetchone()[0].isoformat()
     descriptor = {
@@ -305,6 +321,8 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
     )
     if candidate.get("analytical_contract"):
         descriptor["analytical_contract"] = candidate["analytical_contract"]
+    if candidate.get("weather"):
+        descriptor["weather"] = candidate["weather"]
     with _locked(connection, token["target"]) as (cur, row):
         _authority(row, token)
         cur.execute(
@@ -373,7 +391,7 @@ def request_result(connection, target, request_id):
     return json.loads(rows[0][0])
 
 
-def reuse_active(connection, token, inputs, contract):
+def reuse_active(connection, token, inputs, contract, *, weather=None):
     """Exact input/processing replay is a no-op: retire new authority, keep epoch."""
     with _locked(connection, token["target"]) as (cur, row):
         _authority(row, token)
@@ -387,7 +405,15 @@ def reuse_active(connection, token, inputs, contract):
         if len(rows) != 1:
             raise Stale("Active registry cardinality mismatch")
         descriptor = json.loads(rows[0][0])
-        if descriptor["inputs"] != inputs or descriptor["processing_contract"] != contract:
+        if descriptor.get("weather") and weather is None:
+            raise ValueError(
+                "An existing complete weather release cannot be downgraded to flight-only"
+            )
+        if (
+            descriptor["inputs"] != inputs
+            or descriptor["processing_contract"] != contract
+            or descriptor.get("weather") != weather
+        ):
             return None
         cur.execute(
             "UPDATE AIRLINE_DB.CONTROL.RUNS SET status='PUBLISHED',release_id=%s "

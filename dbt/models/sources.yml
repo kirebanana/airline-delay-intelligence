@@ -7,3 +7,5 @@ sources:
     tables:
       - name: selected_raw
         description: Run-local source view; not a serving or published object.
+      - name: selected_weather
+        description: Exact decoded/provenance-preserving weather input for the optional fixed pilot.

@@ -1,0 +1,23 @@
+{
+  "version": "den-local-january-2025-v1",
+  "scope_start": "2025-01-01",
+  "scope_end_exclusive": "2025-02-01",
+  "bts_airport_id": 11292,
+  "bts_airport_sequence_id": "1129202",
+  "iata": "DEN",
+  "icao": "KDEN",
+  "station": "72565003017",
+  "timezone": "America/Denver",
+  "station_name": "DENVER INTERNATIONAL AIRPORT",
+  "station_record_begin": "19940718",
+  "station_record_end": "20250827",
+  "station_latitude": 39.847,
+  "station_longitude": -104.656,
+  "station_elevation_m": 1647.2,
+  "history_url": "https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv",
+  "history_sha256": "1994747ab4af1b97e63adb434b4d0d022f2daee76f0c144ea9ab46be2d906604",
+  "format_url": "https://www.ncei.noaa.gov/pub/data/noaa/isd-format-document.pdf",
+  "format_sha256": "1be604b08b5f7c2429e6aef178ff8893019c234bc7bc51bfb7ec1e16a6682f04",
+  "verified": "2026-10-30",
+  "rationale": "BTS contemporaneous DEN ID/sequence/name, contemporaneous NOAA KDEN/name/location and NOAA station-record span support this one-month airport-level context mapping. FAA DEN/KDEN timezone context agrees. Station record span is not a sensor relocation history, proof of runway conditions, or a multi-year crosswalk."
+}

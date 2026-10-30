@@ -85,6 +85,30 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_fixed_weather_scope_coverage_and_empty_non_den_filters(self):
+        class WeatherReader(FixtureReader):
+            def pin(self):
+                return {**super().pin(), "weather": {"weather_id": "fixture-only"}}
+
+            def weather(self, descriptor, filters):
+                return {
+                    "pilot_coverage": [
+                        {"VARIABLE": "temperature", "SCHEDULED_ROWS": 10, "MATCHED_ROWS": 10}
+                    ],
+                    "selected_coverage": [],
+                    "daily": [],
+                    "comparisons": []
+                    if filters.origin == 14771
+                    else [{"LOCAL_DATES": 1, "SCHEDULED_ROWS": 10}],
+                }
+
+        app = AppTest.from_function(render, args=(WeatherReader(),)).run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("five local dates" in w.value for w in app.warning))
+        app.selectbox(key="origin").set_value(14771).run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("No DEN pilot rows" in w.value for w in app.info))
+
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
         self.assertFalse(app.exception)

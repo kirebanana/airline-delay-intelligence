@@ -15,3 +15,12 @@ exposures:
       - ref('dim_carrier')
     owner:
       name: Project owner
+  - name: den_january_weather_drilldown
+    config:
+      enabled: "{{ var('weather_enabled', false) }}"
+    type: dashboard
+    description: Fixed DEN/local-January separate-variable context with all-row coverage and date support.
+    depends_on:
+      - ref('den_weather')
+    owner:
+      name: Project owner

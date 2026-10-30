@@ -6,7 +6,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from airline_warehouse.analytics import filter_options, query_metrics, query_secondary, relation
+from airline_warehouse.analytics import (
+    filter_options,
+    query_metrics,
+    query_secondary,
+    query_weather,
+    relation,
+)
 from airline_warehouse.connection import connect_as
 
 
@@ -23,6 +29,11 @@ def cached_options(identity, descriptor, _reader):
 @st.cache_data(ttl=900, max_entries=256, show_spinner=False)
 def cached_secondary(identity, descriptor, filters, _reader):
     return _reader.secondary(descriptor, filters)
+
+
+@st.cache_data(ttl=900, max_entries=128, show_spinner=False)
+def cached_weather(identity, descriptor, filters, _reader):
+    return _reader.weather(descriptor, filters)
 
 
 class Reader:
@@ -68,13 +79,23 @@ class Reader:
             development=descriptor.get("development", False),
         )
 
+    def weather(self, descriptor, filters):
+        return query_weather(
+            self.connection, descriptor, filters, development=descriptor.get("development", False)
+        )
+
 
 def render(reader):
     import pandas as pd
     import streamlit as st
 
     from airline_warehouse.analytics import Filters, cache_identity
-    from airline_warehouse.dashboard import cached_metrics, cached_options, cached_secondary
+    from airline_warehouse.dashboard import (
+        cached_metrics,
+        cached_options,
+        cached_secondary,
+        cached_weather,
+    )
 
     st.title("Airline Delay Intelligence")
     try:
@@ -279,6 +300,53 @@ def render(reader):
         "Descriptive comparisons reflect carrier, route and schedule mix; "
         "no causality or fairness adjustment."
     )
+    st.subheader("DEN investigation — scheduled weather context")
+    if descriptor.get("weather"):
+        try:
+            reader.validate(descriptor)
+            weather = cached_weather(
+                cache_identity(descriptor, filters, "all", minimum, 500),
+                descriptor,
+                filters,
+                reader,
+            )
+        except Exception:
+            st.error("Weather results unavailable. Reload; no partial-release fallback was used.")
+            st.stop()
+        st.caption(
+            "Fixed DEN-origin, Denver-local January 2025 only, including cancellations/diversions. "
+            "Latest independently accepted observation at/before scheduled departure, age ≤60 min. "
+            "Temperature °C; wind m/s; visibility m. Each variable may use a different time."
+        )
+        st.write(
+            "Complete pilot coverage — all scheduled pilot rows, unaffected by sidebar filters"
+        )
+        st.dataframe(weather["pilot_coverage"], hide_index=True)
+        st.write(
+            "Filtered DEN context — sidebar dates, carrier and directional-route filters apply"
+        )
+        st.dataframe(weather["selected_coverage"], hide_index=True)
+        comparisons = weather["comparisons"]
+        if comparisons:
+            st.dataframe(comparisons, hide_index=True)
+            if any(r["LOCAL_DATES"] < 5 or r["SCHEDULED_ROWS"] < minimum for r in comparisons):
+                st.warning(
+                    "Some weather groups have fewer than five local dates or the eligible-count "
+                    "threshold. Inspect support; they are not performance rankings."
+                )
+        else:
+            st.info("No DEN pilot rows match these filters; national weather is not available.")
+        with st.expander("Weather daily coverage and episode concentration"):
+            st.dataframe(weather["daily"], hide_index=True)
+        st.caption(
+            "Largest-date share shows episode concentration: flights on a shared date/episode "
+            "are not independent weather events. Unmatched rows remain visible, not benign. "
+            "Carrier/route/hour mix and cancellation selection confound comparisons. "
+            "Scheduled conditions do not establish conditions at a cancellation decision, "
+            "real-time availability, or that weather caused disruption. No compound conditions."
+        )
+    else:
+        st.info("This release does not yet contain the qualified DEN/local-January weather pilot.")
     # Old descriptors remain readable but do not pretend to contain new model fields.
     if descriptor.get("analytical_contract") == "secondary-v1" or descriptor.get("development"):
         try:

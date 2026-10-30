@@ -4,7 +4,7 @@ import datetime as dt
 import re
 from dataclasses import dataclass
 
-QUERY_VERSION = "categories-recovery-v3"
+QUERY_VERSION = "categories-recovery-weather-v4"
 GROUPS = {
     "all": (),
     "carrier": ("marketing_carrier_id", "marketing_label"),
@@ -215,4 +215,89 @@ def query_secondary(connection, descriptor, filters, *, development=False):
             ORDER BY cancelled_rows DESC"""),
         "distribution": read("""SELECT recovery_band,COUNT(*) AS eligible_rows
             FROM selected WHERE recovery_eligible GROUP BY recovery_band ORDER BY recovery_band"""),
+    }
+
+
+def query_weather(connection, descriptor, filters, *, development=False):
+    relation(descriptor, development=development)
+    if not descriptor.get("weather"):
+        raise ValueError("This release does not contain the qualified fixed weather pilot")
+    table = f"AIRLINE_DB.{descriptor['schema']}." + ("DEN_WEATHER" if development else "WEATHER")
+    conditions, parameters = filter_predicate(filters)
+    scope = f"SELECT * FROM {table} WHERE {' AND '.join(conditions)}"
+
+    def read(sql, values):
+        with connection.cursor() as cur:
+            cur.execute(sql, values)
+            return [
+                dict(zip([c[0] for c in cur.description], row, strict=True))
+                for row in cur.fetchall()
+            ]
+
+    def coverage(selected, values):
+        results = []
+        for v in ("temperature", "wind", "visibility"):
+            results.extend(
+                {"VARIABLE": v, **row}
+                for row in read(
+                    f"""
+                SELECT cancelled,COUNT(*) AS scheduled_rows,
+                COALESCE(COUNT_IF({v}_match_status='matched'),0) AS matched_rows,
+                matched_rows::DOUBLE/NULLIF(scheduled_rows,0) AS coverage,
+                COALESCE(COUNT_IF({v}_match_status='stale'),0) AS stale_rows,
+                COALESCE(COUNT_IF({v}_match_status='no_prior_accepted'),0) AS no_prior_accepted,
+                COALESCE(COUNT_IF({v}_match_status='mapping_or_time'),0) AS mapping_or_time,
+                COALESCE(COUNT_IF({v}_newest_status='rejected_qc'),0) AS newest_rejected_qc,
+                COALESCE(COUNT_IF({v}_newest_status='missing'),0) AS newest_missing,
+                COALESCE(COUNT_IF({v}_newest_status='malformed'),0) AS newest_malformed,
+                COALESCE(COUNT_IF({v}_older_good_fallback),0) AS older_good_fallback,
+                AVG(IFF({v}_match_status='matched',{v}_age_seconds,NULL))
+                    AS mean_matched_age_seconds,
+                MAX(IFF({v}_match_status='matched',{v}_age_seconds,NULL)) AS max_matched_age_seconds
+                FROM ({selected}) GROUP BY cancelled ORDER BY cancelled""",
+                    values,
+                )
+            )
+        return results
+
+    comparisons, daily = [], []
+    for v in ("temperature", "wind", "visibility"):
+        comparisons.extend(
+            {"VARIABLE": v, **row}
+            for row in read(
+                f"""
+            WITH daily AS (SELECT {v}_band AS band,flight_date,COUNT(*) AS scheduled_rows,
+                COALESCE(COUNT_IF(cancelled=1),0) AS cancelled_rows,
+                COALESCE(COUNT_IF(departure_eligible),0) AS departure_denominator,
+                COALESCE(COUNT_IF(departure_eligible AND departure_delayed=1),0) AS delayed_rows
+                FROM ({scope}) GROUP BY {v}_band,flight_date)
+            SELECT band,SUM(scheduled_rows) AS scheduled_rows,COUNT(*) AS local_dates,
+                MAX(daily.scheduled_rows)::DOUBLE/NULLIF(SUM(daily.scheduled_rows),0)
+                    AS largest_date_share,
+                SUM(cancelled_rows) AS cancelled_rows,
+                SUM(cancelled_rows)::DOUBLE/NULLIF(SUM(daily.scheduled_rows),0)
+                    AS cancellation_rate,
+                SUM(departure_denominator) AS departure_denominator,
+                SUM(delayed_rows) AS delayed_rows,
+                SUM(delayed_rows)::DOUBLE/NULLIF(SUM(departure_denominator),0)
+                    AS departure_delay_rate
+            FROM daily GROUP BY band ORDER BY band""",
+                parameters,
+            )
+        )
+        daily.extend(
+            {"VARIABLE": v, **row}
+            for row in read(
+                f"""
+            SELECT flight_date,COUNT(*) AS scheduled_rows,
+                COALESCE(COUNT_IF({v}_match_status='matched'),0) AS matched_rows
+            FROM ({scope}) GROUP BY flight_date ORDER BY flight_date""",
+                parameters,
+            )
+        )
+    return {
+        "pilot_coverage": coverage(f"SELECT * FROM {table}", []),
+        "selected_coverage": coverage(scope, parameters),
+        "comparisons": comparisons,
+        "daily": daily,
     }

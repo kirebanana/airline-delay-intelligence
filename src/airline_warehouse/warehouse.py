@@ -48,20 +48,29 @@ def processing_contract():
         if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
             digest.update(str(p.relative_to(project)).encode())
             digest.update(p.read_bytes())
-    for name in ("dbt_runner.py", "deadlines.py"):
+    for name in ("dbt_runner.py", "deadlines.py", "weather.py"):
         digest.update(name.encode())
         digest.update((Path(__file__).parent / name).read_bytes())
     digest.update((project.parent / "uv.lock").read_bytes())
     return digest.hexdigest()
 
 
-def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> dict:
+def build_candidate(
+    manifests: list[dict], output: Path, budget_path: Path, *, weather_path=None
+) -> dict:
     """Create-only build. Non-success never emits a sealed candidate descriptor."""
     output = Path(output).resolve()
     if output.exists():
         raise ValueError("Candidate output already exists; do not overwrite accepted artifacts")
     schema = "WORK_" + uuid.uuid4().hex[:24].upper()
     plan = candidate_plan(manifests, schema)
+    weather = None
+    if weather_path is not None:
+        from airline_warehouse.weather import read_weather
+
+        weather, _ = read_weather(weather_path)
+        if "2025-01" not in plan["inputs"]:
+            raise ValueError("The required weather pilot needs the selected January BTS input")
     project = Path(__file__).resolve().parents[2] / "dbt"
     contract = processing_contract()
     output.mkdir(parents=True)
@@ -103,6 +112,17 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
                     f"CREATE VIEW AIRLINE_DB.{schema}.SELECTED_RAW AS "
                     + " UNION ALL ".join(selects)
                 )
+            if weather_path is not None:
+                from airline_warehouse.weather import load_weather
+
+                weather, weather_table = load_weather(
+                    DeadlineConnection(conn, remaining, deadline=deadline), weather_path
+                )
+                with DeadlineConnection(conn, remaining, deadline=deadline).cursor() as cur:
+                    cur.execute(
+                        f"CREATE VIEW AIRLINE_DB.{schema}.SELECTED_WEATHER AS "
+                        f"SELECT record FROM {weather_table}"
+                    )
             command = [
                 sys.executable,
                 "-m",
@@ -117,7 +137,9 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
                 "--log-path",
                 str(output / "logs"),
                 "--vars",
-                json.dumps({"expected_rows": plan["expected_rows"]}),
+                json.dumps(
+                    {"expected_rows": plan["expected_rows"], "weather_enabled": weather is not None}
+                ),
             ]
             result = subprocess.run(
                 command,
@@ -159,6 +181,9 @@ def build_candidate(manifests: list[dict], output: Path, budget_path: Path) -> d
             "built_at": dt.datetime.now(dt.UTC).isoformat(),
             "elapsed_seconds": time.monotonic() - started,
         }
+        if weather is not None:
+            descriptor["weather"] = weather
+            descriptor["tables"].extend(["WEATHER_OBSERVATIONS", "DEN_WEATHER"])
         (output / "candidate.json").write_text(json.dumps(descriptor, indent=2) + "\n")
         return descriptor
     except BaseException as error:
@@ -186,12 +211,13 @@ def grant_candidate(connection, candidate: dict, role: str):
     schema = candidate["schema"]
     if not candidate.get("sealed") or not re.fullmatch(r"WORK_[A-F0-9]{24}", schema):
         raise ValueError("Only a sealed candidate can be granted")
-    tables = (
-        ("FACT_FLIGHTS",)
-        if role == "AIRLINE_READER_ROLE"
-        else ("FACT_FLIGHTS", "DIM_DATE", "DIM_AIRPORT", "DIM_CARRIER")
-    )
+    tables = ("FACT_FLIGHTS",) if role == "AIRLINE_READER_ROLE" else candidate_tables(candidate)
     with connection.cursor() as cur:
         cur.execute(f"GRANT USAGE ON SCHEMA AIRLINE_DB.{schema} TO ROLE {role}")
         for table in tables:
             cur.execute(f"GRANT SELECT ON TABLE AIRLINE_DB.{schema}.{table} TO ROLE {role}")
+
+
+def candidate_tables(candidate):
+    base = ("FACT_FLIGHTS", "DIM_DATE", "DIM_AIRPORT", "DIM_CARRIER")
+    return base + (("WEATHER_OBSERVATIONS", "DEN_WEATHER") if candidate.get("weather") else ())

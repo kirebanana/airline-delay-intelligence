@@ -50,7 +50,15 @@ def _record_uncertainty(output, budget_path, request_id, release_id, error):
 
 
 def refresh(
-    artifacts, output, budget_path, target, request_id, *, stage="full", candidate_path=None
+    artifacts,
+    output,
+    budget_path,
+    target,
+    request_id,
+    *,
+    stage="full",
+    candidate_path=None,
+    weather_path=None,
 ):
     """Full loads inputs and builds; build skips loading; publish uses a sealed dependency.
 
@@ -65,6 +73,11 @@ def refresh(
     manifests = [read_artifact(Path(p)) for p in artifacts]
     plan = candidate_plan(manifests, "WORK_" + "0" * 24)
     contract = processing_contract()
+    weather = None
+    if weather_path is not None:
+        from airline_warehouse.weather import read_weather
+
+        weather, _ = read_weather(weather_path)
     candidate = None
     if stage == "publish":
         candidate = json.loads(Path(candidate_path).read_text())
@@ -73,6 +86,7 @@ def refresh(
         if (
             any(candidate.get(k) != v for k, v in dependency.items())
             or candidate.get("processing_contract") != contract
+            or candidate.get("weather") != weather
         ):
             raise ValueError("Candidate dependency is incompatible with selected inputs/processing")
     output, budget_path = Path(output), Path(budget_path)
@@ -87,6 +101,7 @@ def refresh(
         inputs=plan["inputs"],
         processing_contract=contract,
         attempt=attempt,
+        weather=weather,
     )
     (output / "intent.json").write_text(json.dumps(intent, indent=2) + "\n")
     token = None
@@ -102,10 +117,13 @@ def refresh(
                 if (
                     descriptor["inputs"] != plan["inputs"]
                     or descriptor["processing_contract"] != contract
+                    or descriptor.get("weather") != weather
                 ):
                     raise ValueError("Duplicate request identity has different dependencies")
             else:
-                descriptor = reuse_active(publisher, token, plan["inputs"], contract)
+                descriptor = reuse_active(
+                    publisher, token, plan["inputs"], contract, weather=weather
+                )
         if descriptor is not None:
             result = dict(status="PUBLISHED", reused=True, descriptor=descriptor)
         else:
@@ -115,7 +133,9 @@ def refresh(
                     for manifest in manifests:
                         execute_load(bounded, manifest, BUCKET, funding_verified=True)
             if candidate is None:
-                candidate = build_candidate(manifests, output / "candidate", budget_path)
+                candidate = build_candidate(
+                    manifests, output / "candidate", budget_path, weather_path=weather_path
+                )
             with connect_as("builder") as builder, live_budget(builder, budget_path) as remaining:
                 grant_candidate(
                     DeadlineConnection(builder, remaining), candidate, "AIRLINE_PUBLISHER_ROLE"
