@@ -1,0 +1,9 @@
+# Use only after the reviewed state-bucket apply and protected migration approval.
+# This file contains no credentials. Native lockfiles do not need DynamoDB.
+bucket              = "airline-state-336805808138-us-east-2"
+key                 = "aws/ingestion.tfstate"
+region              = "us-east-2"
+profile             = "airline-old-dev"
+allowed_account_ids = ["336805808138"]
+encrypt             = true
+use_lockfile        = true

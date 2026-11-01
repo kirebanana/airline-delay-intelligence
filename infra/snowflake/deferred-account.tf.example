@@ -1,0 +1,21 @@
+# NOT ACTIVE: the current service role sees AIRLINE_BUDGET at ACCOUNT scope, but
+# the provider's account attachment read returns null and proposes an account
+# ALTER. Preserve the actual binding until an owner-authorized infrastructure
+# identity can read/plan it faithfully. Do not ignore the managed attachment.
+# The current_account provider also warns that CREATE unsets unrelated account
+# parameters: an eventual import must be mandatory, never a create fallback.
+resource "snowflake_current_account" "budget_attachment" {
+  resource_monitor = snowflake_resource_monitor.budget.name
+  lifecycle {
+    prevent_destroy = true
+    # The project's monitor attachment does not own unrelated account policies.
+    ignore_changes = [
+      cortex_enabled_cross_region, authentication_policy, password_policy,
+      session_policy, network_policy, packages_policy, feature_policy,
+    ]
+  }
+}
+import {
+  to = snowflake_current_account.budget_attachment
+  id = "current_account"
+}

@@ -1,0 +1,62 @@
+{
+  "snowflake_imports": {
+    "snowflake_account_role.service[\"AIRLINE_DEV_ROLE\"]": "\"AIRLINE_DEV_ROLE\"",
+    "snowflake_account_role.service[\"AIRLINE_PUBLISHER_ROLE\"]": "\"AIRLINE_PUBLISHER_ROLE\"",
+    "snowflake_account_role.service[\"AIRLINE_READER_ROLE\"]": "\"AIRLINE_READER_ROLE\"",
+    "snowflake_database.airline": "\"AIRLINE_DB\"",
+    "snowflake_file_format.bts": "AIRLINE_DB|RAW|BTS_CSV_V1",
+    "snowflake_resource_monitor.budget": "\"AIRLINE_BUDGET\"",
+    "snowflake_schema.builder[\"INGEST_TEST\"]": "\"AIRLINE_DB\".\"INGEST_TEST\"",
+    "snowflake_schema.builder[\"RAW\"]": "\"AIRLINE_DB\".\"RAW\"",
+    "snowflake_schema.control": "\"AIRLINE_DB\".\"CONTROL\"",
+    "snowflake_stage_external_s3.bts": "\"AIRLINE_DB\".\"RAW\".\"BTS_EXTERNAL_STAGE\"",
+    "snowflake_storage_integration_aws.bts": "\"AIRLINE_BTS_S3\"",
+    "snowflake_warehouse.development": "\"AIRLINE_DEV_WH\""
+  },
+  "aws_existing": [
+    "aws_iam_role.snowflake",
+    "aws_iam_role_policy.read_prepared",
+    "aws_s3_bucket.bts",
+    "aws_s3_bucket_ownership_controls.bts",
+    "aws_s3_bucket_policy.tls",
+    "aws_s3_bucket_public_access_block.bts",
+    "aws_s3_bucket_server_side_encryption_configuration.bts"
+  ],
+  "aws_creates": [
+    "aws_cloudwatch_log_group.jobs",
+    "aws_ecr_repository.jobs",
+    "aws_iam_role.execution",
+    "aws_iam_role.job[\"acquisition\"]",
+    "aws_iam_role.job[\"publisher\"]",
+    "aws_iam_role.job[\"warehouse\"]",
+    "aws_iam_role_policy.execution",
+    "aws_iam_role_policy.job[\"acquisition\"]",
+    "aws_iam_role_policy.job[\"publisher\"]",
+    "aws_iam_role_policy.job[\"warehouse\"]",
+    "aws_iam_role_policy.operator_state",
+    "aws_internet_gateway.jobs",
+    "aws_route.jobs_internet",
+    "aws_route_table.jobs",
+    "aws_route_table_association.jobs",
+    "aws_s3_bucket.state",
+    "aws_s3_bucket_ownership_controls.state",
+    "aws_s3_bucket_policy.state",
+    "aws_s3_bucket_public_access_block.state",
+    "aws_s3_bucket_server_side_encryption_configuration.state",
+    "aws_s3_bucket_versioning.state",
+    "aws_secretsmanager_secret.snowflake[\"publisher\"]",
+    "aws_secretsmanager_secret.snowflake[\"warehouse\"]",
+    "aws_security_group.jobs",
+    "aws_subnet.jobs",
+    "aws_vpc.jobs",
+    "aws_vpc_endpoint.s3",
+    "aws_vpc_security_group_egress_rule.jobs[\"certificate_status\"]",
+    "aws_vpc_security_group_egress_rule.jobs[\"https\"]"
+  ],
+  "deferred": [
+    "AIRLINE_DEV service-user adoption",
+    "AIRLINE_PUBLISHER service-user adoption",
+    "AIRLINE_READER service-user adoption",
+    "account-level AIRLINE_BUDGET attachment adoption"
+  ]
+}
