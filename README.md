@@ -4,14 +4,17 @@ A data engineering project that transforms historical U.S. airline records into 
 Snowflake warehouse and an interactive reliability dashboard. Built with **Python,
 Amazon S3, Snowflake, dbt Core, Streamlit, and Terraform**.
 
-The January 2025 dataset contains **599,013 reported scheduled operation rows**,
-including **24,732 Denver departures**. The focus is both useful analysis and a
+The January 2023–December 2025 baseline contains **22,562,477 reported scheduled
+operation rows**, with a fixed **24,732-row Denver/January 2025 weather pilot**.
+The focus is both useful analysis and a
 reproducible pipeline: preserving source data, handling corrections without double
 counting, and keeping incomplete refreshes out of the dashboard.
 
-**Current milestone (2026-10-30):** January is published with all six analytical
-areas and the complete DEN weather pilot. It is not yet the required 2023–2025
-baseline or final cloud-platform acceptance. See the [category/recovery notes](docs/secondary-analytics.md),
+**Current milestone (2026-11-01):** The complete 2023–2025 baseline is published
+with all six analytical areas and the DEN weather pilot. Independent source-to-reader
+reconciliation, failure preservation, replay and real-dashboard qualification pass.
+Cloud-platform acceptance remains separate. See the [baseline evidence](docs/baseline.md),
+[category/recovery notes](docs/secondary-analytics.md),
 [weather runbook](docs/weather.md) and [attended local recovery](docs/local-recovery.md).
 
 ## Analytics

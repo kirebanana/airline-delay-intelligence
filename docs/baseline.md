@@ -1,7 +1,11 @@
 # Complete baseline preparation and validation
 
-**Ticket14 in progress.** The presenter still reads the validated January release;
-the full 2023–2025 baseline is not yet declared accepted or published.
+**2026-11-01: ticket14 implementation qualified.** The
+presenter now selects all36months of2023–2025 together with the fixed weather
+pilot. Both the deliberately incomplete35-month release and ordinary36-month
+addition pass independent original-archive versus restricted-reader checks.
+Full-scale frozen-failure preservation, safe same-input replay and the real
+dashboard also pass. This is not final cloud/platform acceptance.
 
 ## Explicit official acquisition
 
@@ -64,7 +68,8 @@ cancellation/diversion flags. The two scheduled2400rows are outside DEN/January.
 There are4,680,953category-eligible rows:4,680,950with complete allocations and
 three missing allocations (disclosed exclusions, never zero-filled).
 Withheld-month addition, independent full-reader reconciliation and measured
-full-scale costs remain completion gates—not conclusions of the small fixtures.
+full-scale execution are evidenced below, separately from the small fixtures.
+Full-scale failure, replay and dashboard qualification are recorded below.
 
 ## Reviewed source allocation exception
 
@@ -117,3 +122,91 @@ Total unallocated minutes:5,145. This is not added to any reported category.
 The isolated live predicate qualification covers each exact triple and separately
 changes each of its three identifiers; full native-field/fingerprint checks remain
 additional required build/publication gates.
+
+## Published baseline and independent reconciliation
+
+| Ordinary refresh | Selected rows | Release | Intent→result |
+| --- | ---: | --- | ---: |
+| 35months, withholding2025-12 | 21,917,490 | `3552cea5c97c4b558b013e5ff70c1ad4` | 998.77s |
+| 36months, adding2025-12 | 22,562,477 | `02d263d7f7174890b6da97c15a81d098` | 519.08s |
+
+The added month contributes644,987rows. The other35selected artifact/source
+identities, processing contract and fixed weather artifact remain unchanged.
+Original ZIPs, prepared payloads, manifests, retrieval evidence and weather
+references are retained in private Ohio S3:149objects/3,394,721,176bytes. Independent
+HEAD checks verified every full-object SHA256, length and AES256 setting; retries
+were conditional, not overwrites. No IAM, bucket-policy, warehouse or monitor
+changes were made.
+
+An independent original-archive oracle matches each released result, including
+all four populations, unknown exclusions, exact signed/recovery quantiles, all
+category minutes/counts, cancellation reasons, recovery bands and carrier/month/
+weekday/hour/origin/DEN-directional-route populations. The complete result has
+22,189,768ordinary-arrival indicator/signed-delay observations,17,508,815on-time
+arrivals,314,973cancellations and57,734diversions. There are two unknown arrival
+indicators, not inferred on-time flights. Signed arrival mean/median/p90 are
+7.4045414535/−6/44minutes. Recovery eligibility is4,587,535with878,883recovered;
+signed improvement mean/median/p90 are4.2281865969/7/21minutes.
+
+All24,732DEN-pilot rows remain together, including313cancellations and69diversions.
+Matched temperature/wind/visibility counts remain24,585/24,683/24,380. National
+coverage does not expand or relax the fixed pilot's station, time, quality or
+age rules. Methodology remains in [analytics](analytics.md),
+[categories/recovery](secondary-analytics.md), [weather](weather.md) and
+[attended recovery](local-recovery.md); the [README diagram](../README.md#architecture)
+describes the implemented local/S3/Snowflake path.
+
+## Measured finite execution and costs
+
+Both full builds used the unchanged X-Small warehouse, two dbt threads and the
+existing45-minute run/five-minute publication/600-second SQL bounds. dbt build
+time was236.12s/239.86s; the longest36-month dbt node was90.90s. No resizing or
+automatic limit increases were needed. The36-month driver took574.67s including
+local artifact verification and before/after metadata reads; intent→result above
+is a narrower interval, not billed warehouse uptime.
+
+After the35-month refresh, selected RAW tables reported1,977,866,240compressed
+logical bytes and candidate tables5,783,546,880bytes. These are not unique physical
+storage or total retained-clone/time-travel billing. The36-month account-monitor
+observation increased3.89→4.11credits, leaving0.89of5. This rounded/lagged shared
+account delta is not exact per-job billing and excludes retained-storage charges.
+The0.5-credit recovery reserve remains; no monitor reset/increase is authorized.
+After final qualification the monitor reported4.46used/0.54remaining. This is
+close to the unchanged0.5-credit recovery reserve: do not start further warehouse
+data work without checking the remaining allowance and obtaining an exact owner
+adjustment if needed. The selected target has no owner/request or unresolved
+recovery flag; final metadata showed no running/queued warehouse statements.
+
+## Final failure, replay and dashboard qualification
+
+The full-scale negative test passed in95.79s. One derived recovery value was
+changed only in a new clone. Ordinary refresh with unchanged declared dependencies
+correctly reused the good complete release; direct frozen publication rejected
+the clone, retired that exact failed authority, and retained the entire active
+descriptor, weather dependency and22,562,477-row restricted-reader result. No
+accepted source/current-work/released row was changed. The first test attempt
+incorrectly expected the safe reuse path to raise; the test was corrected to
+exercise both boundaries. This is not a full-scale changed-input rebuild failure
+claim. The representative changed-input rejection/correction/clean rebuild and
+repacked-input suite separately passed535.70s with the current processing contract.
+
+A subsequent ordinary full-baseline same-input refresh reused
+`02d263d7f7174890b6da97c15a81d098` without creating another candidate. The before/
+after withheld-month comparison confirms644,987added rows and unchanged other
+input bindings, processing contract and fixed weather artifact; both releases
+have independent reader reconciliations.
+
+The real restricted-reader Streamlit AppTest passed all six views, DEN filtering,
+reset, full released labeling, and error checks. Initial application-cache-cold/
+warm renders took23.69s/5.17s; individual grouped views3.34–7.68s and DEN filtering
+16.78s. Application caches were cleared and Snowflake query-result reuse disabled;
+initial warehouse state was recorded, not forcibly suspended. These are not a
+warehouse-cold benchmark or a production SLA. Local-only presentation remains;
+no inbound endpoint or hosted dashboard was introduced.
+
+Final offline discovery:78tests,47executed and31explicit live skips. Ruff checks/
+formatting and dbt parse pass. Independent Standards and Spec reviews found no
+blocking defects; scoped source exceptions were separately reviewed. Original
+analytical contracts and the [architecture diagram](../README.md#architecture)
+remain authoritative. AWS container/orchestration/deployment and final project
+acceptance remain later tickets, not conclusions of this data milestone.
