@@ -65,11 +65,8 @@ def _ranged_download(url, output, deadline):
         path = output / f"range-{i:03d}.partial"
         size = 0
         with open_range(start, end, etag) as response, path.open("xb") as stream:
-            final = urllib.parse.urlparse(response.url)
             if (
-                final.scheme != "https"
-                or final.hostname not in ("www.transtats.bts.gov", "transtats.bts.gov")
-                or response.status != 206
+                response.status != 206
                 or response.headers.get("ETag") != etag
                 or response.headers.get("Content-Range") != f"bytes {start}-{end}/{total}"
             ):
@@ -176,12 +173,6 @@ def _single_download(url, path, deadline, digest, timeout_seconds):
         _open_source(request, timeout=min(30, timeout_seconds)) as response,
         path.open("xb") as stream,
     ):
-        final = urllib.parse.urlparse(response.url)
-        if final.scheme != "https" or final.hostname not in (
-            "www.transtats.bts.gov",
-            "transtats.bts.gov",
-        ):
-            raise ValueError("Unexpected official-source redirect")
         declared = response.headers.get("Content-Length")
         if declared is not None and not 0 < int(declared) <= MAX_ZIP_BYTES:
             raise ValueError("Official archive exceeds bounded size")

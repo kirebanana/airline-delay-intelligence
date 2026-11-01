@@ -58,8 +58,12 @@ This does not relax DEN/local-January anchor rules: a newly ambiguous pilot cloc
 still blocks weather acceptance until resolved, and no national UTC/DST or actual
 event reconstruction is claimed.
 
-Full-source profile results, newly discovered critical allocation exceptions,
-withheld-month addition, independent full-reader reconciliation and measured
+The completed36-month census contains22,562,477rows, no candidate-key collisions,
+no non-N duplicate indicators, no Flights values other than1.00 and no unknown
+cancellation/diversion flags. The two scheduled2400rows are outside DEN/January.
+There are4,680,953category-eligible rows:4,680,950with complete allocations and
+three missing allocations (disclosed exclusions, never zero-filled).
+Withheld-month addition, independent full-reader reconciliation and measured
 full-scale costs remain completion gates—not conclusions of the small fixtures.
 
 ## Reviewed source allocation exception
@@ -82,3 +86,34 @@ still apply. A real Snowflake predicate test accepts the exact triple and reject
 each changed archive hash, row ordinal or row fingerprint. Unallocated minutes
 remain visible in the existing category reconciliation summary; reported-minute
 shares use only the actual allocations. New mismatches still block publication.
+
+The completed census found fourteen further rows of this same source anomaly
+class. A separate native-archive re-read verified all sixteen identities, flags,
+signed delays and all-five-zero allocations. All have DivAirportLandings=9 but
+Cancelled=0/Diverted=0; the native flags remain authoritative. The exact triples
+are maintained only in [the shared integrity gate](../dbt/tests/secondary_integrity.sql).
+The complete scoped exception inventory is:
+
+| Source month | Row | Flight date | Flight | Route | Unallocated minutes |
+| --- | ---: | --- | --- | --- | ---: |
+| 2023-10 | 416811 | 2023-10-04 | UA2334 | ORD→DCA | 231 |
+| 2024-01 | 432835 | 2024-01-21 | UA4813 | IAH→BRO | 1345 |
+| 2025-09 | 370558 | 2025-09-08 | WN1671 | FLL→BWI | 75 |
+| 2025-10 | 382201 | 2025-10-30 | WN3884 | LAS→SAN | 198 |
+| 2025-10 | 441145 | 2025-10-28 | WN159 | ABQ→DEN | 99 |
+| 2025-11 | 521583 | 2025-11-26 | WN2143 | BNA→PNS | 137 |
+| 2025-11 | 529535 | 2025-11-30 | WN2466 | DEN→HDN | 334 |
+| 2025-11 | 551098 | 2025-11-20 | WN1866 | DEN→AUS | 93 |
+| 2025-11 | 551665 | 2025-11-20 | WN2921 | LAS→BOI | 813 |
+| 2025-11 | 553361 | 2025-11-20 | WN4353 | SMF→BOI | 820 |
+| 2025-11 | 554832 | 2025-11-21 | WN3051 | DEN→BZN | 277 |
+| 2025-11 | 559464 | 2025-11-24 | WN981 | DEN→BZN | 118 |
+| 2025-11 | 563067 | 2025-11-26 | WN4657 | STL→CMH | 188 |
+| 2025-11 | 594240 | 2025-11-17 | WN2537 | LAS→BUR | 189 |
+| 2025-11 | 597291 | 2025-11-18 | WN2827 | DEN→HOU | 98 |
+| 2025-11 | 599553 | 2025-11-18 | WN3994 | SMF→ONT | 130 |
+
+Total unallocated minutes:5,145. This is not added to any reported category.
+The isolated live predicate qualification covers each exact triple and separately
+changes each of its three identifiers; full native-field/fingerprint checks remain
+additional required build/publication gates.

@@ -11,6 +11,19 @@ from airline_warehouse.acquire import acquire_month
 
 
 class OfficialAcquisitionTests(unittest.TestCase):
+    def test_both_transports_reject_an_untrusted_final_source_host(self):
+        for ranged in (False, True):
+            with self.subTest(ranged=ranged), tempfile.TemporaryDirectory() as tmp:
+                response = io.BytesIO(b"not an official archive")
+                response.url = "https://untrusted.invalid/source.zip"
+                with patch(
+                    "airline_warehouse.acquire.urllib.request.urlopen", return_value=response
+                ):
+                    with self.assertRaisesRegex(ValueError, "redirect"):
+                        acquire_month("2025-01", Path(tmp) / "output", ranged=ranged)
+                self.assertTrue(response.closed)
+                self.assertFalse((Path(tmp) / "output/retrieval.json").exists())
+
     def test_validator_bound_ranges_reconstruct_exact_bytes_without_mixing_versions(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

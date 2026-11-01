@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import unittest
 import uuid
 from pathlib import Path
@@ -22,19 +23,28 @@ class BaselinePartitionTests(unittest.TestCase):
         c = json.loads(Path(os.environ["AIRLINE_TEST_CANDIDATE"]).read_text())
         sql = (Path(__file__).parents[1] / "dbt/tests/secondary_integrity.sql").read_text()
         sql = sql.replace("{{ ref('fact_flights') }}", "fixture")
-        source = "68c5a96d28c6193a85e7257ba131faf0112b810c54e3a9fc38ff61cb66b5bfa0"
-        fingerprint = "276f51920a74634e164decea6802afb1176382e87e28c3d5429ef66daa98b849"
+        reviewed = re.findall(
+            r'"SOURCE_SHA256"=\'([a-f0-9]{64})\'\s+and "SOURCE_ROW_NUMBER"=([0-9]+)'
+            r'\s+and "SOURCE_ROW_SHA256"=\'([a-f0-9]{64})\'',
+            sql,
+        )
+        self.assertEqual(len(set(reviewed)), 16)
+        cases = [
+            case
+            for source, ordinal, fingerprint in reviewed
+            for case in (
+                (source, int(ordinal), fingerprint, 0),
+                ("0" * 64, int(ordinal), fingerprint, 1),
+                (source, int(ordinal) + 1, fingerprint, 1),
+                (source, int(ordinal), "0" * 64, 1),
+            )
+        ]
         with (
             connect_as("builder") as conn,
             live_budget(conn, Path(os.environ["AIRLINE_BATCH_STATE"])) as remaining,
         ):
             with DeadlineConnection(conn, remaining).cursor() as cur:
-                for sha, ordinal, row_sha, expected in [
-                    (source, 416811, fingerprint, 0),
-                    ("0" * 64, 416811, fingerprint, 1),
-                    (source, 416812, fingerprint, 1),
-                    (source, 416811, "0" * 64, 1),
-                ]:
+                for sha, ordinal, row_sha, expected in cases:
                     with self.subTest(sha=sha, ordinal=ordinal, row_sha=row_sha):
                         cur.execute(
                             "WITH fixture AS (SELECT * REPLACE ("
