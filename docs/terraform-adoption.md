@@ -1,16 +1,22 @@
 # Terraform adoption and finite-job preparation
 
-**Status: preparation only, 2026-11-01.** Owner approved provider installation,
-inventory and saved-plan preparation. No apply, authoritative import, backend
-migration, IAM change or authentication change has been performed. Ticket15 is
-not complete until its adoption, backend and live security gates pass.
+**Status: reviewed AWS platform apply complete, 2026-11-02.** The12Snowflake
+imports completed with no resource changes and a clean subsequent plan. After
+the initial AWS partial apply, the owner attached the exact state policy, which
+was imported without modifying the role. The owner then approved the exact
+eight-addition completion binary; it applied8adds/0changes/0deletes. Both original
+and completion plan hashes/actions were checked immediately before use.
+AWS now has36managed instances and a clean no-change subsequent plan; prior28IDs
+and original ingestion bucket/policies/trust are preserved. No backend migration
+or authentication change has run. Deferred user/account-attachment adoption and
+backend/live access gates mean the whole ticket15is not yet complete.
 
 ## Ownership and preservation
 
 | Root | Intended ownership | Current state |
 | --- | --- | --- |
-| `infra/ingestion/` | Existing S3/reader trust plus proposed minimal AWS job primitives | Existing local bootstrap state; seven live ingestion resources unchanged |
-| `infra/snowflake/` | Agreed static database/schemas, roles, warehouse, monitor, integration, format/stage | Twelve exact import-only previews; no authoritative state yet |
+| `infra/ingestion/` | Existing S3/reader trust plus minimal AWS job primitives | Local state holds36instances, including original7unchanged; post-apply plan clean |
+| `infra/snowflake/` | Agreed static database/schemas, roles, warehouse, monitor, integration, format/stage | Twelve existing objects imported into protected local state; follow-up plan clean |
 | SQL migrations | Publication control tables/procedures and singleton initialization | Not Terraform-managed |
 | Runtime pipeline | RAW tables, candidates, release schemas, data and registry DML | Not Terraform-managed |
 
@@ -118,6 +124,74 @@ not a verified bill cap. New-service credit eligibility, ECR scanning mode and
 retention/usage assumptions must be confirmed before apply. Future finite
 Fargate/public-IPv4/workflow runs require a separate measured envelope. No
 infrastructure apply or authentication change is authorized by this document.
+
+## Verified funding and apply outcomes —2026-11-02
+
+The owner enabled read-only `billing:GetCredits` with `Resource="*"` and activated
+IAM Billing access. Actual API results verify four enabled account-local credits,
+$156.20remaining, applicable after discounts. All four explicitly include Amazon
+Simple Storage Service, Amazon EC2 Container Registry (ECR), Amazon Inspector,
+AWS Secrets Manager, AmazonCloudWatch, Amazon Virtual Private Cloud and AWS Data
+Transfer. Thus storage/current and noncurrent versions, requests, image storage,
+scanning, secret/API usage, logs and chargeable network transfer have corresponding
+eligible products, not merely three selected services. EC2/ECS/Step Functions are
+also listed, but this does not authorize later runs. Actual expiry is
+**2027-06-13**, superseding the earlier owner-attested July date. Taxes and exact
+future usage are not a zero-cost guarantee.
+
+The approved AWS preparation plan starts no tasks, images, log producers, public
+IPs or NAT/interface endpoints. Empty ECR/state infrastructure introduces no image
+scan volume. Conservatively allow$0.80/month for two eventual secrets plus APIs,
+usage-based S3/ECR/log storage/requests/transfer within the reviewed small$5/month
+envelope; image/job volume must be measured separately before ticket16live runs.
+
+Both exact binary SHA256hashes and action sets were checked immediately before
+apply; no regenerated plan was substituted. Snowflake applied12imports/0mutations.
+AWS's original29-create apply initially stopped with five direct errors:
+
+- `iam:PutRolePolicy` on the existing operator role is explicitly denied. Preserve
+  that self-modification guard; an owner/admin should attach the already reviewed
+  exact state/lock policy rather than letting the agent upgrade its own role.
+- Missing `ec2:CreateVpcEndpoint` for the approved project S3 gateway endpoint.
+- Missing `logs:CreateLogGroup` for the exact job log group.
+- Missing `secretsmanager:CreateSecret` for each of the two metadata-only secrets.
+
+Four job/execution inline policies were also uncreated because their failed
+dependencies prevented evaluation. No broad fallback, rollback/deletion or new
+authentication was attempted. Subsequent Terraform refresh reports no drift among
+the27existing instances; all9remaining changes are uncreated parts of the original
+scope. A successful plan is not proof of create/tag/retention permission.
+
+Independent AWS reads verify state bucket Ohio/private/versioned/AES256, job
+security-group ingress empty, only TCP80/443egress, expected subnet/routes, and an
+empty ECR repository. Registry scanning configuration remains unreadable. There
+are no running job resources; no secret values exist from this apply. Local state
+backups and diagnostics are preserved; the owner subsequently approved the exact
+completion plan below, not reuse of the stale original plan.
+
+### Completion apply and independent inspection
+
+Owner-approved completion binary SHA256:
+`f8c4eeccd5ceccecf050ca6220c9c87f321ef9a5dc43d47ef97c16b3a4efd9d3`.
+The guard verified8creates/28unchanged/0updates/0deletes, then applied that binary
+without replan/substitution. A subsequent36-resource plan is all no-op.
+
+Independent AWS MCP reads verified the available S3 gateway endpoint and exact
+route association/policy,30-day empty log group, two tagged secret containers
+with no versions, four ECS trust policies and all four scoped inline policies.
+Warehouse and publisher secret permissions reference their own exact generated
+ARNs; acquisition/execution have no secret permission. Original operator
+`ProtectAgentRole` explicit deny remains in place, including PutRolePolicy,
+DeleteRolePolicy, trust changes and PassRole on the operator itself. No attached
+managed policies or administrator fallback were added by the agent.
+
+Remaining work is not hidden by the clean infrastructure plan: state is still
+local; backend migration/locking tests and deferred Snowflake identity adoption
+need their existing authorization gates. Ticket16can progress locally, but ECR
+registry-scanning inspection still fails `ecr:GetRegistryScanningConfiguration`.
+No image push or substantive ECS workload proceeds before scanning-cost review
+and bounded S3/ECR/Snowflake/endpoint connectivity tests. No secret values or
+new authentication were installed by completing this plan.
 
 Sources: [Terraform S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3),
 [ephemeral variables](https://developer.hashicorp.com/terraform/language/block/variable#ephemeral),
