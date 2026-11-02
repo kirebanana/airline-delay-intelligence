@@ -1,0 +1,58 @@
+name: Credential-free validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.11.14"
+          enable-cache: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.13.4"
+          terraform_wrapper: false
+      - name: Install hash-locked dependencies
+        run: uv sync --locked --all-extras
+      - name: Lint and offline tests
+        run: |
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python -m unittest discover -s tests
+      - name: Parse dbt without warehouse credentials
+        run: uv run --locked dbt parse --no-partial-parse --project-dir dbt --profiles-dir dbt
+      - name: Validate Terraform without a backend or credentials
+        run: |
+          for root in infra/ingestion infra/snowflake; do
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$root" validate -no-color
+          done
+      - name: Build allowlisted probe and test without network
+        run: |
+          context=$(mktemp -d)
+          for file in containers/probe/Dockerfile containers/probe/requirements.txt src/airline_warehouse/connectivity_probe.py tests/test_connectivity_probe.py; do
+            install -D "$file" "$context/$file"
+          done
+          docker build --platform linux/amd64 -f "$context/containers/probe/Dockerfile" -t airline-connectivity-probe:ci "$context"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 0.25 --entrypoint python airline-connectivity-probe:ci -m unittest discover -s tests -v

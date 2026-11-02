@@ -40,6 +40,9 @@ analytics = [
     { name = "snowflake-connector-python" },
     { name = "streamlit" },
 ]
+cloud = [
+    { name = "boto3" },
+]
 load = [
     { name = "snowflake-connector-python" },
 ]
@@ -51,13 +54,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", marker = "extra == 'cloud'", specifier = "==1.43.119" },
     { name = "dbt-core", marker = "extra == 'analytics'", specifier = "==1.12.6" },
     { name = "dbt-snowflake", marker = "extra == 'analytics'", specifier = "==1.12.4" },
     { name = "snowflake-connector-python", marker = "extra == 'analytics'", specifier = "==4.8.1" },
     { name = "snowflake-connector-python", marker = "extra == 'load'", specifier = "==4.8.1" },
     { name = "streamlit", marker = "extra == 'analytics'", specifier = "==1.66.1" },
 ]
-provides-extras = ["load", "analytics"]
+provides-extras = ["cloud", "load", "analytics"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = "==0.14.2" }]
@@ -1933,8 +1937,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

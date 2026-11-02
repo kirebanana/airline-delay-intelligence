@@ -6,10 +6,12 @@ the initial AWS partial apply, the owner attached the exact state policy, which
 was imported without modifying the role. The owner then approved the exact
 eight-addition completion binary; it applied8adds/0changes/0deletes. Both original
 and completion plan hashes/actions were checked immediately before use.
-AWS now has36managed instances and a clean no-change subsequent plan; prior28IDs
-and original ingestion bucket/policies/trust are preserved. No backend migration
-or authentication change has run. Deferred user/account-attachment adoption and
-backend/live access gates mean the whole ticket15is not yet complete.
+AWS preparation had36managed instances and a clean no-change subsequent plan;
+prior28IDs and original ingestion bucket/policies/trust are preserved. The later
+owner-authorized continuation adds four connectivity resources and migrates the
+AWS state to its protected S3 backend, as recorded below. Deferred Snowflake
+user/account-attachment adoption and live workload gates mean ticket15is not
+yet complete. No workload authentication change has run.
 
 ## Ownership and preservation
 
@@ -185,13 +187,54 @@ ARNs; acquisition/execution have no secret permission. Original operator
 DeleteRolePolicy, trust changes and PassRole on the operator itself. No attached
 managed policies or administrator fallback were added by the agent.
 
-Remaining work is not hidden by the clean infrastructure plan: state is still
-local; backend migration/locking tests and deferred Snowflake identity adoption
-need their existing authorization gates. Ticket16can progress locally, but ECR
-registry-scanning inspection still fails `ecr:GetRegistryScanningConfiguration`.
-No image push or substantive ECS workload proceeds before scanning-cost review
-and bounded S3/ECR/Snowflake/endpoint connectivity tests. No secret values or
-new authentication were installed by completing this plan.
+At the completion-apply checkpoint state was still local. After the owner added the read-only
+scanning permission, the actual registry read verified `BASIC` with no registry
+rules. Basic scanning adds no scan fee; configuration remains unchanged.
+Ticket16's secret-free probe image builds locally from a pinned amd64 base with
+hash-locked dependencies. Its three injected-client tests pass inside a non-root,
+read-only, network-disabled container. These are offline tests, not qualification
+of live ECR/S3/Snowflake or restrictive endpoint compatibility. No image push,
+ECS launch, secret values or new authentication accompanied that local work.
+
+### Autonomous continuation and live secret-free qualification — 2026-11-02
+
+The owner subsequently authorized autonomous project-scoped tickets16–20,
+including agent-reviewed non-destructive Terraform applies and bounded live tests.
+The probe image was pushed once and independently reconciled through ECR. Basic
+scan completed with6HIGH/15MEDIUM/4LOW OS-package findings, not a clean scan;
+its use is limited to this secret-free probe pending substantive-image remediation.
+
+Reviewed plan SHA256
+`9bc75f08de6b105778c1d88a089293a42e0ba7608a423dabef456a3ee1dbb7dc`
+added one ECS cluster and three exact task definitions, with36prior instances
+unchanged. No IAM/network changes, service or launch accompanied the apply.
+Three separate finite Fargate tests then ran as acquisition/warehouse/publisher.
+All three independently observed tasks reached STOPPED with essential exit0 and
+the exact ECR digest. Each wrote a checksum-bearing AES256 conditional S3 report
+after verifying its own role, selected manifest hash, denied state HEAD and
+certificate-verified Snowflake HTTPS302. All reports explicitly state Snowflake
+was **not authenticated**. No SQL, warehouse/data/release mutation occurred.
+
+AWS state was copied to the existing versioned AES256 S3 backend, retaining
+protected original local and remote snapshots. Resources and outputs are exactly
+equal before/after; Terraform established a new remote lineage/serial1 rather
+than retaining the old local lineage/serial51. This was recorded, not hidden or
+overwritten. A known conditional test lock made Terraform refuse a competing
+plan; its exact ID/ETag were checked before removing only that test lock. A
+subsequent ordinary locked refresh/plan succeeded with40no-ops. An earlier plan
+proposed task replacements solely for ECS-added empty arrays; it was rejected,
+the configuration was normalized to the existing definition, and no replacement
+was applied. Snowflake state remains local and its deferred imports remain open.
+
+Actual permission inspection found no operator PutSecretValue permission for the
+two empty secret containers; GetLogEvents on the job log group is also denied.
+The operator self-modification deny remains intact. Authenticated task tests and
+cloud refresh are blocked on protected seeding authorization/capability, not
+declared successful from TLS-only results. Credential-free GitHub validation is
+drafted locally and its commands checked; no GitHub push/workflow run occurred.
+GitHub currently reports the repository public and main unprotected, contrary to
+the workspace's private-repository record. Visibility was not changed; public
+publication and OIDC trust remain on hold pending resolution.
 
 Sources: [Terraform S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3),
 [ephemeral variables](https://developer.hashicorp.com/terraform/language/block/variable#ephemeral),

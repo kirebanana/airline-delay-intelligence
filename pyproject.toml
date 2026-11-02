@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
+cloud = ["boto3==1.43.119"]
 load = ["snowflake-connector-python==4.8.1"]
 analytics = [
     "dbt-core==1.12.6",

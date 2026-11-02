@@ -1,0 +1,10 @@
+**
+!containers/
+!containers/probe/
+!containers/probe/Dockerfile
+!containers/probe/requirements.txt
+!src/
+!src/airline_warehouse/
+!src/airline_warehouse/connectivity_probe.py
+!tests/
+!tests/test_connectivity_probe.py

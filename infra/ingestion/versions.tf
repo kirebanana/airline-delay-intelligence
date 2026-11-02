@@ -6,8 +6,15 @@ terraform {
       version = "6.33.0"
     }
   }
-  # Local bootstrap state only: keep this directory private and outside Git.
-  # Remote state is adopted later; do not create a second bucket for this slice.
+  backend "s3" {
+    bucket              = "airline-state-336805808138-us-east-2"
+    key                 = "aws/ingestion.tfstate"
+    region              = "us-east-2"
+    profile             = "airline-old-dev"
+    allowed_account_ids = ["336805808138"]
+    encrypt             = true
+    use_lockfile        = true
+  }
 }
 
 provider "aws" {
