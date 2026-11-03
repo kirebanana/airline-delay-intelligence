@@ -1,6 +1,7 @@
 name: Untrusted subject denial
 
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -9,6 +10,7 @@ permissions:
 
 jobs:
   denied:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Deliberately has no release environment; its signed subject must be denied.
