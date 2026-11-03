@@ -8,13 +8,45 @@ ROLE = "arn:aws:iam::336805808138:role/"
 REPOSITORY = "336805808138.dkr.ecr.us-east-2.amazonaws.com/airline-delay-intelligence"
 
 
-def inspect_release_plan(plan, image_digest):
+def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_digest):
         raise ValueError("A tested immutable image digest is required")
     expected = {f'aws_ecs_task_definition.stage["{k}"]' for k in KINDS} | {
         "aws_sfn_state_machine.refresh"
     }
     changes = plan.get("resource_changes", [])
+    deposed = [r for r in changes if r.get("deposed")]
+    if deposed:
+        if not allow_retained_deposed or len(deposed) > 3:
+            raise ValueError("Partial apply requires explicit retained-deposed recovery review")
+        seen = set()
+        for resource in deposed:
+            kind = resource.get("index")
+            change = resource["change"]
+            before = change.get("before") or {}
+            arn = (
+                "arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-"
+                + str(kind)
+                + r":[1-9][0-9]*"
+            )
+            if (
+                kind not in KINDS
+                or kind in seen
+                or resource.get("address") != f'aws_ecs_task_definition.stage["{kind}"]'
+                or resource.get("mode") != "managed"
+                or resource.get("type") != "aws_ecs_task_definition"
+                or not re.fullmatch(r"[a-f0-9]{8}", resource["deposed"])
+                or change["actions"] != ["delete"]
+                or change.get("after") is not None
+                or before.get("skip_destroy") is not True
+                or before.get("family") != "airline-stage-" + kind
+                or not re.fullmatch(arn, before.get("arn", ""))
+            ):
+                raise ValueError("Only exact retained deposed task state may be retired")
+            seen.add(kind)
+        # skip_destroy is the pinned provider's no-deregister path. This retires
+        # deposed Terraform bindings, not the retained AWS task definitions.
+        changes = [r for r in changes if not r.get("deposed")]
     if len(changes) != 4 or {r.get("address") for r in changes} != expected:
         raise ValueError("Release plan must contain exactly three task families and one workflow")
     revisions = 0
@@ -117,6 +149,7 @@ def inspect_release_plan(plan, image_digest):
                 )
     return {
         "task_revisions": revisions,
+        "retained_deposed_state_retirements": len(deposed),
         "retained_old_revisions": True,
         "platform_changes": False,
         "data_launch": False,
