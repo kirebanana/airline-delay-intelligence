@@ -11,6 +11,10 @@ on:
         description: "Apply the reviewed application-only plan (never starts data)"
         type: boolean
         default: false
+      recover_partial_apply:
+        description: "Explicit attended review of retained deposed Terraform task bindings"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,6 +38,7 @@ jobs:
       DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
       INPUT_IMAGE_DIGEST: ${{ inputs.image_digest }}
       INPUT_APPLY: ${{ inputs.apply }}
+      INPUT_RECOVER_PARTIAL: ${{ inputs.recover_partial_apply }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -57,4 +62,5 @@ jobs:
           mkdir -p /tmp/opencode
           args=()
           if [ "$INPUT_APPLY" = "true" ]; then args+=(--apply); fi
+          if [ "$INPUT_RECOVER_PARTIAL" = "true" ]; then args+=(--recover-partial); fi
           uv run --locked python infra/jobs/deliver.py deliver --image-digest "$INPUT_IMAGE_DIGEST" "${args[@]}"

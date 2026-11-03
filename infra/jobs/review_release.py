@@ -28,6 +28,7 @@ def main():
     parser.add_argument("receipt", type=Path)
     parser.add_argument("--terraform", default="terraform")
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--recover-retained-deposed", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     sources = [
@@ -54,7 +55,9 @@ def main():
             [args.terraform, "show", "-json", str(args.plan.resolve())], cwd=root
         )
     )
-    review = inspect_release_plan(plan, image["image_digest"])
+    review = inspect_release_plan(
+        plan, image["image_digest"], allow_retained_deposed=args.recover_retained_deposed
+    )
     tasks = {
         kind: f"arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-{kind}:1"
         for kind in KINDS

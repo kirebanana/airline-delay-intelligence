@@ -19,6 +19,7 @@ class DeliveryTests(unittest.TestCase):
         policy = (ROOT / "infra/ingestion/delivery.tf").read_text()
         self.assertIn('Action = "ecs:DescribeTaskDefinition", Resource = "*"', policy)
         self.assertIn('"states:ListStateMachineVersions"', policy)
+        self.assertIn('Action = "states:ValidateStateMachineDefinition", Resource = "*"', policy)
 
     def test_trust_uses_immutable_repository_subject(self):
         policy = (ROOT / "infra/ingestion/delivery.tf").read_text()

@@ -145,7 +145,7 @@ def container(image, *command, capture=False):
     )
 
 
-def deliver(image_digest, apply):
+def deliver(image_digest, apply, recover_partial=False):
     denials = direct_denials()
     if image_digest and not re.fullmatch(r"sha256:[a-f0-9]{64}", image_digest):
         raise ValueError("An exact immutable digest is required")
@@ -241,7 +241,15 @@ def deliver(image_digest, apply):
             "-var=processing_contract=" + contract,
             "-out=" + str(plan),
         )
-        run("python", "infra/jobs/review_release.py", str(plan), str(manifest), str(receipt))
+        recovery_args = ["--recover-retained-deposed"] if recover_partial else []
+        run(
+            "python",
+            "infra/jobs/review_release.py",
+            str(plan),
+            str(manifest),
+            str(receipt),
+            *recovery_args,
+        )
         run(
             "python",
             "infra/jobs/review_release.py",
@@ -281,10 +289,11 @@ if __name__ == "__main__":
     parser.add_argument("mode", choices=["login", "deny-subject", "deliver"])
     parser.add_argument("--image-digest", default="")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--recover-partial", action="store_true")
     args = parser.parse_args()
     if args.mode == "login":
         login()
     elif args.mode == "deny-subject":
         print(json.dumps({"untrusted_subject_denied": expect_denied(assume)}))
     else:
-        deliver(args.image_digest, args.apply)
+        deliver(args.image_digest, args.apply, args.recover_partial)
