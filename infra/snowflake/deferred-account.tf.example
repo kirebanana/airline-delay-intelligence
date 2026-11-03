@@ -1,7 +1,7 @@
-# NOT ACTIVE: the current service role sees AIRLINE_BUDGET at ACCOUNT scope, but
-# the provider's account attachment read returns null and proposes an account
-# ALTER. Preserve the actual binding until an owner-authorized infrastructure
-# identity can read/plan it faithfully. Do not ignore the managed attachment.
+# NOT ACTIVE: provider 2.21.0 does not read resource_monitor into account state.
+# More privilege does not make this an import-only or drift-detecting resource.
+# Preserve the correct ACCOUNT-level binding; see docs/snowflake-adoption-gap.md.
+# A same-value ALTER requires a separate owner decision and ACCOUNTADMIN execution.
 # The current_account provider also warns that CREATE unsets unrelated account
 # parameters: an eventual import must be mandatory, never a create fallback.
 resource "snowflake_current_account" "budget_attachment" {

@@ -12,6 +12,8 @@ COPY sql /app/sql
 COPY references /app/references
 COPY .streamlit /app/.streamlit
 COPY infra/jobs/refresh.asl.json.tftpl /app/infra/jobs/refresh.asl.json.tftpl
+COPY infra/jobs/deliver.py /app/infra/jobs/deliver.py
+COPY .github/workflows /app/.github/workflows
 COPY uv.lock /app/uv.lock
 COPY tests /app/tests
 RUN mkdir -p /work && chown 65532:65532 /work

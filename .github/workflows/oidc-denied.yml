@@ -1,0 +1,28 @@
+name: Untrusted subject denial
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  denied:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Deliberately has no release environment; its signed subject must be denied.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.14"
+          enable-cache: false
+      - run: uv sync --locked --all-extras
+      - name: Require actual STS denial for this signed subject
+        run: uv run --locked python infra/jobs/deliver.py deny-subject

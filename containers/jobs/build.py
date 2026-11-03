@@ -15,6 +15,8 @@ files += list((root / "tests").glob("*.py"))
 files += [root / "sql/07_publication.sql"]
 files += [root / "references/den-weather-pilot.json"]
 files += [root / "infra/jobs/refresh.asl.json.tftpl"]
+files += [root / "infra/jobs/deliver.py"]
+files += [root / ".github/workflows" / name for name in ("validate.yml", "release.yml")]
 files += [root / ".streamlit/config.toml"]
 files += [
     p

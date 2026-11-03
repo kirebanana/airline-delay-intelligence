@@ -1,0 +1,18 @@
+name: Non-main environment denial
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  denied:
+    if: github.ref != 'refs/heads/main'
+    environment: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Must never reach a runner on an untrusted branch
+        run: |
+          echo "Unexpected environment admission; stop qualification"
+          exit 1

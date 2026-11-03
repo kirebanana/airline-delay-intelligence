@@ -24,11 +24,11 @@ captures the 2026-11-03 evidence checkpoint, not a live inventory or final accep
 - The owner confirmed intentional public visibility on 2026-11-03 and authorized
   publication after a secrets/state/sensitive-evidence audit. This prerequisite is
   resolved; actual protected delivery still requires qualification.
-- Current Snowflake workload roles cannot faithfully expose the provider metadata
-  required for service-user/account attachment adoption. Do not remove
-  `prevent_destroy`, suppress TYPE drift or add broad workload privileges to obtain
-  a green plan. Use an explicitly approved infrastructure identity and reviewed
-  import/no-change plan.
+- Three Snowflake user imports need owner-level metadata visibility. Separately,
+  the pinned provider cannot read the account-monitor attachment even with more
+  privilege. The [exact gap and owner-only procedure](snowflake-adoption-gap.md)
+  distinguish these cases. Both remain deferred without blocking unrelated
+  delivery; full infrastructure acceptance remains incomplete.
 - Terraform 1.13.4 has been restored with owner approval from HashiCorp's release
   site. Its checksum manifest has a verified HashiCorp signature, the archive
   checksum matches and the executable reports the pinned version. This prerequisite
