@@ -5,8 +5,10 @@ No cleanup, credential retirement or infrastructure deletion is authorized by th
 document. The working application requires Snowflake; preserved evidence is not an
 offline replacement warehouse or dashboard.
 
-Use the [sanitized qualification summary](evidence/qualification-summary.json) for
-the dated measured results and remaining gates. It is a checkpoint, not live status.
+Use the [latest sanitized delivery summary](evidence/delivery-qualification.json)
+and [initial data/recovery snapshot](evidence/qualification-summary.json) for dated
+measured results. The earlier snapshot's GitHub/tooling prerequisites have since
+been resolved; neither file is live status or owner acceptance.
 
 ## The story in ten minutes
 

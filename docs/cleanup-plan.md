@@ -18,6 +18,7 @@ actions. Trial or credit expiry is not evidence that resources were deleted.
 | Logs and query journals | Preserve sanitized evidence and current configured retention | Export approved sanitized summaries first; retention changes need explicit review |
 | VPC/subnet/endpoint/ECR/secrets/log storage | Retain while project remains demonstrable | Review exact Terraform destroy plan only after evidence/dependency checks and owner authorization |
 | GitHub workflows and repository | Preserve reviewed code/evidence; prevent unattended data starts | Disable promotion only if requested; visibility/protection/credential changes are separate decisions |
+| GitHub OIDC provider/release role and permissionless retry qualifier | Retain reviewed exact trust and finite qualification evidence | Retirement or trust changes require a separate exact plan; no role/provider deletion is authorized |
 
 ## Before approving any destructive action
 

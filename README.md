@@ -15,8 +15,10 @@ with all six analytical areas and the DEN weather pilot. Independent source-to-r
 reconciliation, failure preservation, replay and real-dashboard qualification pass.
 A separate isolated full-module cloud refresh has also succeeded and independently
 reconciled all 36 months and weather; exact-input cloud replay reused that same
-release without rebuilding. Final CI/security/recovery acceptance remains separate.
-See the [acceptance map](docs/acceptance.md), [sanitized qualification summary](docs/evidence/qualification-summary.json), [cloud evidence](docs/cloud-jobs.md),
+release without rebuilding. Actual protected GitHub promotion, rollback, partial-apply
+recovery and final version-7 replay now pass. Deferred Snowflake adoption and owner
+acceptance remain explicit; known image findings are not hidden.
+See the [acceptance map](docs/acceptance.md), [latest sanitized delivery summary](docs/evidence/delivery-qualification.json), [initial qualification snapshot](docs/evidence/qualification-summary.json), [cloud evidence](docs/cloud-jobs.md),
 [presentation guide](docs/presentation.md), [baseline evidence](docs/baseline.md),
 [category/recovery notes](docs/secondary-analytics.md),
 [weather runbook](docs/weather.md) and [attended local recovery](docs/local-recovery.md).

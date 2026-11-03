@@ -9,6 +9,19 @@ The ECR BASIC scan of candidate `sha256:81de082b00373c1c8258cb367648be7b78a1b539
 completed with 3 HIGH, 9 MEDIUM and 3 LOW findings. All three HIGH findings concern
 Debian system libraries, not the Python dependency lock:
 
+The subsequently GitHub-built/tested candidate
+`sha256:b6e0db451e746e176fdfdd9a2ba04a686756e11254e542eb7a3aca4016cf5610`
+has the same completed scan findings and measured processing contract. Its 128
+container tests discovered 97 passes and 31 opt-in live skips. The assessed library
+findings remain present; promotion must not be described as a vulnerability fix.
+
+Protected-merge promotions also independently scanned
+`sha256:e96b7ec58013830293151ba47ce449102b8fcf29d4d06b9acab10319be87dd43`
+and `sha256:015ad69485677ea618e33dc26afc45bf257251274320e95c8d4ce310fea284e5`.
+Both retain the same 3 HIGH / 9 MEDIUM / 3 LOW findings and measured processing
+contract. The latter includes the strengthened saved-plan graph guard; that is a
+deployment-safety fix, not a repair of the operating-system CVEs.
+
 | Finding | Installed package | Assessment and disposition |
 | --- | --- | --- |
 | CVE-2026-5435 | glibc 2.41-12+deb13u4 | Deprecated DNS record-printing functions can overrun a supplied buffer. Debian classifies stable trixie as vulnerable, with no stable security update (`no-dsa`, minor issue); unstable is fixed at 2.43-3. Keep the finding. |
