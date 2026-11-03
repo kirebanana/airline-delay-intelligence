@@ -1,0 +1,126 @@
+{
+  "date": "2026-11-03",
+  "status": "Implementation qualification complete within documented limits; owner acceptance and deferred infrastructure coverage remain",
+  "repository_visibility": "public, explicitly approved",
+  "source_revision": "2ad70bd35684c56c8a3fb884e1da82123e39957c",
+  "production": {
+    "release_id": "02d263d7f7174890b6da97c15a81d098",
+    "months": 36,
+    "scheduled_rows": 22562477,
+    "unchanged": true
+  },
+  "delivery": {
+    "run_id": 41660763998,
+    "run_url": "https://github.com/kirebanana/airline-delay-intelligence/actions/runs/41660763998",
+    "event": "protected main merge",
+    "oidc": "exact immutable owner/repository/environment subject and sts audience",
+    "wrong_audience_denied": true,
+    "untrusted_branch_subject_denied": true,
+    "pull_request_subject_denied": true,
+    "non_main_environment_denied_before_runner": true,
+    "direct_launch_denials": {
+      "states_start_execution": "AccessDeniedException",
+      "ecs_run_task": "AccessDeniedException"
+    },
+    "no_deployment_data_starts": true,
+    "independent_human_review_required": false,
+    "solo_owner_required_ci_and_pr_gate": true
+  },
+  "deployment": {
+    "workflow_version": 7,
+    "task_revisions": {
+      "acquisition": 7,
+      "warehouse": 7,
+      "publisher": 7
+    },
+    "image_digest": "sha256:015ad69485677ea618e33dc26afc45bf257251274320e95c8d4ce310fea284e5",
+    "processing_contract": "e97fb85ef90025b8eaee8d18d78e227d82511df0f276b5c4b26238204ef7d7ac",
+    "final_replay": {
+      "request_id": "81d63016420c4ad58c68822674fed9c6",
+      "status": "SUCCEEDED",
+      "tasks_stopped": 1,
+      "queries_terminal": 28,
+      "descriptor_unchanged": true,
+      "warehouse_rebuild": false,
+      "production_unchanged": true
+    }
+  },
+  "retention_and_rollback": {
+    "old_version3_running_during_version4_promotion": true,
+    "old_and_next_version_replays_passed": true,
+    "actual_oidc_rollback_and_partial_apply_recovery_run": 41650132440,
+    "prior_task_revisions3_through7_all_active": true,
+    "old_images_and_data_releases_retained": true,
+    "data_rollback": false
+  },
+  "retry_engine": {
+    "real_aws_execution": true,
+    "service_errors_synthetic": true,
+    "service_calls": 0,
+    "additional_transient_attempts": 1,
+    "deterministic_retries": 0,
+    "whole_workflow_timeout_seconds": 3,
+    "automatic_timeout_finalization": false,
+    "real_s3_outage_claim": false
+  },
+  "image_security": {
+    "scan_status": "COMPLETE",
+    "counts": {
+      "HIGH": 3,
+      "MEDIUM": 9,
+      "LOW": 3
+    },
+    "high_findings": [
+      "CVE-2026-19499",
+      "CVE-2026-5435",
+      "CVE-2026-85091"
+    ],
+    "stable_vendor_upgrade_available_at_review": false,
+    "findings_suppressed": false,
+    "vulnerability_free_claim": false
+  },
+  "tests": {
+    "container_discovered": 136,
+    "container_passed": 105,
+    "live_skipped": 31,
+    "network": "none",
+    "root_filesystem": "read-only",
+    "independent_saved_graph_and_override_review": "fixed, regression-tested and re-reviewed"
+  },
+  "managed_state": {
+    "platform_instances": 53,
+    "application_instances": 4,
+    "snowflake_instances": 12,
+    "all_three_roots_nochange": true,
+    "versioned_aes256_state": true,
+    "residual_locks": false
+  },
+  "terminal_scope": {
+    "warehouse_state": "SUSPENDED",
+    "warehouse_running": 0,
+    "warehouse_queued": 0,
+    "known_originating_sessions": 27,
+    "matching_open_transactions": 0,
+    "active_test_claim": false,
+    "running_tasks": 0,
+    "services": 0,
+    "running_workflows": 0,
+    "ingress_rules": 0,
+    "operator_self_protection_preserved": true
+  },
+  "remaining_owner_gates": [
+    "Three service-user imports need owner-controlled metadata visibility; no workload admin grant",
+    "Account-monitor attachment is correct live but provider2.21.0 does not read it; more privileges do not repair that limitation",
+    "Owner acceptance of met/unmet report, residual scan findings and presentation walkthrough"
+  ],
+  "limitations": [
+    "Synthetic AWS error-engine injection is not an actual S3 service outage",
+    "No exhaustive native-library reachability proof; known findings retained",
+    "Credits/monitor/estimates are not a hard cash cap; financial details remain outside Git",
+    "Preserved evidence is not a permanently hosted offline application"
+  ],
+  "cleanup": {
+    "proposal_only": true,
+    "infrastructure_data_or_release_deletion": false
+  }
+}

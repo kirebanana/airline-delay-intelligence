@@ -185,16 +185,43 @@ running tasks, ECS services or refresh executions. That Snowflake metadata showe
 zero running/queued statements, monitor quota 10.00, used 4.92 and remaining 5.08
 credits. These remain account-wide observations, not final billing.
 
-Still outstanding: remaining transient/retained-version delivery qualification;
-GitHub-executed CI and protected OIDC promotion/rollback; deferred Snowflake
-infrastructure identity/adoption; final acceptance and owner presentation review.
-The final 121-test image (31 live skips) includes the recovery fix and is pushed/
-digest-verified/scanned, but is **not yet promoted**. Its Basic scan still has the
-same known 3 HIGH / 9 MEDIUM / 3 LOW findings. The previously installed temporary
-Terraform binary disappeared during interruption; no tool was reinstalled and no
-unreviewed SDK registration was substituted for Terraform. Remaining promotion/
-overlap/rollback tests need that approved tool restored. Snowflake static
-state has now migrated separately to the protected backend without object mutation.
-The presentation and non-destructive cleanup proposal are prepared. The
-credential-free validation workflow contains no cloud
-authentication, image push, deployment or data-start step.
+## Subsequent delivery and bounded error-engine qualification
+
+The owner confirmed intentional public visibility and authorized verified publication
+on 2026-11-03. Terraform 1.13.4 was restored from HashiCorp with verified signature
+and archive checksum. Reachable Git history and newly staged artifacts were audited
+for credentials/state/sensitive evidence before publication; ignored raw evidence,
+state and binary plans remain outside Git.
+
+The real version-3 replay `retained-overlap-old-e4ab8cb074aa4dfca685381988cca313`
+was RUNNING both before and after promotion to version 4, completed using its exact
+old task/image pins, and reused the existing test descriptor. The subsequent
+`retained-next-version-71c82232dacd4c379c77fdeb95d6e1c4` used version 4 and the
+GitHub-built image, also with one stopped admission task and 28 terminal queries.
+Production was unchanged; all prior task revisions remained ACTIVE.
+
+Actual credential-free GitHub checks, protected OIDC allowed/denied tests, code
+rollback and partial-apply recovery are recorded in [delivery](delivery.md). A
+checked main-branch merge also built/tested/scanned and promoted task/workflow 6
+without starting data. The scanner still reports the three investigated HIGH
+findings; see [image security](image-security.md). No clean-scan claim is made.
+
+The retained permissionless `airline-control-retry-qualification:1` workflow has
+only Choice/Parallel/Fail/Wait/Succeed states and a three-second whole-execution
+bound. Three explicit real AWS executions proved:
+
+- Injected `S3.SlowDown`: two branch entries, then Catch and successful terminal
+  completion—exactly one additional attempt using the production read retry policy.
+- Injected `S3.NoSuchKey`: one branch entry, Catch, no retry.
+- Whole-workflow timeout: TIMED_OUT, no Complete-state entry or automatic finalizer.
+
+This is real AWS ASL-engine qualification with **synthetic errors**, not a naturally
+occurring S3 service outage or data-capable retry. It launches no ECS/SQL/service
+task and adds no service/schedule. Production remains retry-free for data tasks.
+The existing client-death probe separately qualifies the real SQL server timeout.
+
+Snowflake static state is remote, but three user imports and account-attachment
+coverage remain [explicitly deferred](snowflake-adoption-gap.md), without blocking
+unrelated delivery. Final owner acceptance/walkthrough is still required. The
+presentation and non-destructive cleanup proposal are prepared; no infrastructure,
+state, artifact, accepted data or release deletion is authorized or performed.

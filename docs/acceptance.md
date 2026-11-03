@@ -5,18 +5,20 @@ The approved [specification](specifications/airline-delay-intelligence.md#t05-fi
 defines the acceptance outcomes. This index maps implementation evidence and
 remaining gates without weakening those outcomes.
 
-The reviewed [sanitized qualification summary](evidence/qualification-summary.json)
-captures the 2026-11-03 evidence checkpoint, not a live inventory or final acceptance.
+The reviewed [delivery qualification summary](evidence/delivery-qualification.json)
+records the latest checkpoint. The earlier [qualification snapshot](evidence/qualification-summary.json)
+predates resolution of its GitHub/tooling prerequisites. Neither is a live inventory
+or owner-acceptance statement.
 
 | Outcome | Existing evidence | Remaining final gate |
 | --- | --- | --- |
 | AC-01: managed infrastructure | [Adoption](terraform-adoption.md): protected separate AWS/Snowflake static state, preserved bootstrap inventory, scoped platform/application ownership | Deferred Snowflake service-user/account-monitor adoption needs an approved infrastructure identity |
-| AC-02: code delivery without data start | [Delivery](delivery.md): credential-free workflow, verified action commits, local checks, immutable operator promotion and plan guards | Actual GitHub checks, enforced private-repository protection/OIDC trust, deployment identity permission tests and retained-version delivery qualification |
+| AC-02: code delivery without data start | [Delivery](delivery.md): actual credential-free PR checks, protected public-repository environment/OIDC, direct-launch denials, checked-merge promotion, overlap, code rollback and partial-apply recovery; strengthened-guard promotion/replay passed at version 7 | Owner review; public visibility explicitly approved |
 | AC-03: coordinated refresh and completion | [Baseline](baseline.md): actual withheld-month addition; [cloud](cloud-jobs.md): full-module workflow, four stopped tasks, 810 terminal queries and independent 36-month/weather reconciliation | Remaining failure/delivery qualification is separate; complete positive-cloud path is verified |
-| AC-04: repeat/correction correctness | [Baseline](baseline.md), [analytics](analytics.md): local replay, changed preparation and controlled correction/rebuild comparison; [cloud](cloud-jobs.md): exact full-input replay reused the identical descriptor with one admission task | Remaining uncertain-launch/recovery cases |
-| AC-05: atomic/pinned/failure safety | [Cloud recovery](cloud-recovery.md): real abort, detached SQL/transaction, post-commit reconciliation, next admission and stale fencing; prior complete cloud release remains readable | Remaining delivery overlap/rollback qualification is separate |
+| AC-04: repeat/correction correctness | [Baseline](baseline.md), [analytics](analytics.md): local replay, changed preparation and controlled correction/rebuild comparison; [cloud](cloud-jobs.md): exact full-input replay, supported same-name/input launch reconciliation and successful next admission | Owner review; no new positive-path correctness gap identified |
+| AC-05: atomic/pinned/failure safety | [Cloud recovery](cloud-recovery.md): real abort, detached SQL/transaction, post-commit reconciliation, next admission and stale fencing; [delivery](delivery.md): actual overlap, rollback and partial recovery; prior complete cloud release remains readable | Owner review; synthetic retry-engine injection is not a real S3 outage |
 | AC-06: complete analytics/weather | [Baseline](baseline.md), [secondary analytics](secondary-analytics.md), [weather](weather.md), [cloud](cloud-jobs.md): independently reconciled complete cloud result; final real dashboard passed six views, DEN/reset and production pin | No positive-path data gap remains; overall acceptance still requires other outcomes |
-| AC-07: security/runtime/covered costs | [Adoption](terraform-adoption.md), [cloud](cloud-jobs.md): scoped roles/secrets/network, measured finite tasks, durable identities, cumulative monitor/reserve accounting | Remaining actual CI permission and cloud failure/exposure cases; current funding/expiry and final terminal inventory |
+| AC-07: security/runtime/covered costs | [Adoption](terraform-adoption.md), [cloud](cloud-jobs.md), [delivery](delivery.md): actual scoped-role/OIDC denials, no ingress, measured limits and cumulative reserve; final audit found no active tasks/workflows or originating transactions; [image assessment](image-security.md) | Owner review of retained findings and finite funding; credits are not a hard cash cap |
 | AC-08: explanation and preserved evidence | [Presentation](presentation.md), [sanitized summary](evidence/qualification-summary.json), [cleanup proposal](cleanup-plan.md), existing methodology/runbooks and source evidence | Owner walkthrough/review and evidence for outstanding delivery gates; cleanup remains separately unapproved |
 
 ## Known external prerequisites
@@ -40,6 +42,27 @@ captures the 2026-11-03 evidence checkpoint, not a live inventory or final accep
 These are genuine publication/security and privileged-adoption prerequisites, not
 requests for routine implementation approval. Independent cloud, local testing and
 presentation preparation can continue while they are unresolved.
+
+## Final batch disposition
+
+- **16:** Complete cloud positive path, exact replay and retained old/new pins qualified.
+- **17:** Actual public-repository PR/merge CI, scoped OIDC, effective denials,
+  immutable promotion, code rollback and partial-apply recovery qualified.
+- **18:** Abort, detached SQL/transaction, post-commit, next admission and stale
+  fencing qualified. AWS retry/timeout-engine tests use explicit synthetic errors;
+  no naturally occurring S3 outage is claimed.
+- **19:** Consolidated evidence is ready for owner review, **not full acceptance**:
+  AC-01 still has the deferred user/attachment coverage described above, and known
+  image findings/funding limits remain disclosed.
+- **20:** Presentation, diagrams, sanitized evidence and cleanup proposal are prepared.
+  Owner walkthrough/acceptance remains outstanding; no destructive cleanup performed.
+
+All three managed Terraform roots have fresh no-change plans (53 platform, four
+application and twelve Snowflake instances). This is not a claim that deferred
+objects are managed. Final SQL scope covers 27 originating sessions with zero open
+matching transactions and no active test claim. Production remains 36 months and
+22,562,477 rows; all task revisions 3–7 remain ACTIVE. The final warehouse observation
+is SUSPENDED, X-Small, with zero running/queued statements and auto-suspend 60 seconds.
 
 ## Interpretation limits
 
