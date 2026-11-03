@@ -22,6 +22,13 @@ def validate_saved_graph_source(saved_main, current_main):
         raise ValueError("Saved graph source differs from the qualified registrar")
 
 
+def validate_configuration_inventory(saved_files, current_files):
+    """An override/additional module must not replace an otherwise pinned argument."""
+    if set(saved_files) != {"main.tf"} or set(current_files) != {"main.tf"}:
+        raise ValueError("Unapproved Terraform configuration or override file")
+    validate_saved_graph_source(saved_files["main.tf"], current_files["main.tf"])
+
+
 def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_digest):
         raise ValueError("A tested immutable image digest is required")

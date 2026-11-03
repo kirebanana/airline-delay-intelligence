@@ -11,11 +11,28 @@ from airline_warehouse.release_plan import (
     REPOSITORY,
     ROLE,
     inspect_release_plan,
+    validate_configuration_inventory,
     validate_saved_graph_source,
 )
 
 
 class ReleasePlanTests(unittest.TestCase):
+    def test_terraform_overrides_and_additional_modules_are_refused(self):
+        source = b"qualified config"
+        with patch.object(
+            release_plan, "QUALIFIED_MAIN_SHA256", hashlib.sha256(source).hexdigest()
+        ):
+            validate_configuration_inventory({"main.tf": source}, {"main.tf": source})
+            for extra in ("override.tf", "evil_override.tf.json", "../m-extra/main.tf"):
+                with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "override"):
+                    validate_configuration_inventory(
+                        {"main.tf": source, extra: b"evil"}, {"main.tf": source}
+                    )
+                with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "override"):
+                    validate_configuration_inventory(
+                        {"main.tf": source}, {"main.tf": source, extra: b"evil"}
+                    )
+
     def test_saved_source_rejects_graph_bypass_and_archive_source_mismatch(self):
         source = b"""definition = templatefile("${path.module}/refresh.asl.json.tftpl", {
             task_acquisition = aws_ecs_task_definition.stage["acquisition"].arn

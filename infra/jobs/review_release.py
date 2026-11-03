@@ -15,7 +15,11 @@ from pathlib import Path
 import airline_warehouse.cloud_workflow as graph_module
 import airline_warehouse.release_plan as guard_module
 from airline_warehouse.cloud_workflow import definition
-from airline_warehouse.release_plan import KINDS, inspect_release_plan, validate_saved_graph_source
+from airline_warehouse.release_plan import (
+    KINDS,
+    inspect_release_plan,
+    validate_configuration_inventory,
+)
 
 
 def digest(path):
@@ -64,8 +68,17 @@ def main():
     # Terraform's JSON omits the full expression syntax when new task ARNs make
     # the definition unknown. Bind the actual archived HCL, not just references.
     with zipfile.ZipFile(args.plan) as archive:
-        saved_main = archive.read("tfconfig/m-/main.tf")
-    validate_saved_graph_source(saved_main, (root / "main.tf").read_bytes())
+        saved_files = {
+            name.removeprefix("tfconfig/m-/"): archive.read(name)
+            for name in archive.namelist()
+            if name.startswith("tfconfig/") and name != "tfconfig/modules.json"
+        }
+    current_files = {
+        p.name: p.read_bytes()
+        for p in root.iterdir()
+        if p.is_file() and (p.name.endswith(".tf") or p.name.endswith(".tf.json"))
+    }
+    validate_configuration_inventory(saved_files, current_files)
     review = inspect_release_plan(
         plan, image["image_digest"], allow_retained_deposed=args.recover_retained_deposed
     )
