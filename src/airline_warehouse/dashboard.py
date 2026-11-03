@@ -98,7 +98,9 @@ def render(reader):
     )
     from airline_warehouse.warehouse import BASELINE_MONTHS
 
+    st.caption("FLIGHT OPERATIONS · SOURCE-RECONCILED ANALYTICS")
     st.title("Airline Delay Intelligence")
+    st.write("A clearer view of on-time performance, disruption and recovery.")
     try:
         descriptor = reader.pin()  # exactly one descriptor, reused throughout this render
         reader.validate(descriptor)
@@ -146,6 +148,8 @@ def render(reader):
             st.session_state.pop(key, None)
 
     with st.sidebar:
+        st.subheader("Your flight view")
+        st.caption("Explore a consistent, release-pinned slice of the source data.")
         st.button("Reset filters", key="reset", on_click=reset)
         dates = st.date_input(
             "Source dates",
@@ -222,7 +226,7 @@ def render(reader):
     ]
     for col, (name, key) in zip(st.columns(4), labels, strict=True):
         value = summary[key]
-        col.metric(name, "N/A" if value is None else f"{float(value) * 100:.1f}%")
+        col.metric(name, "N/A" if value is None else f"{float(value) * 100:.1f}%", border=True)
     n = int(summary["SCHEDULED_ROWS"])
     st.write(f"Scheduled source rows: {n:,}")
     if not n:
@@ -246,6 +250,7 @@ def render(reader):
             }
         )
     st.dataframe(counts, hide_index=True)
+    st.subheader("How late—or early—do flights arrive?")
     st.write("Signed ordinary-arrival delay (minutes); early arrivals remain negative.")
     for col, (name, key) in zip(
         st.columns(3),
@@ -258,6 +263,7 @@ def render(reader):
         "may differ from indicator eligibility."
     )
     if detail:
+        st.subheader("Compare the selected flight groups")
         frame = pd.DataFrame(detail)
         st.dataframe(frame, hide_index=True)
         st.caption(

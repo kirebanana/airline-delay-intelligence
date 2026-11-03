@@ -10,6 +10,7 @@ COPY src /app/src
 COPY dbt /app/dbt
 COPY sql /app/sql
 COPY references /app/references
+COPY .streamlit /app/.streamlit
 COPY infra/jobs/refresh.asl.json.tftpl /app/infra/jobs/refresh.asl.json.tftpl
 COPY uv.lock /app/uv.lock
 COPY tests /app/tests

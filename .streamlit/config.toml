@@ -1,3 +1,4 @@
+# Local presentation only; no hosting or network-exposure configuration.
 [server]
 address = "127.0.0.1"
 headless = true
@@ -7,3 +8,22 @@ gatherUsageStats = false
 
 [client]
 showErrorDetails = "none"
+
+[theme]
+base = "light"
+primaryColor = "#007F9E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EFF8FD"
+textColor = "#16354A"
+linkColor = "#006E9C"
+borderColor = "#CFE4F0"
+dataframeHeaderBackgroundColor = "#E3F3FA"
+showWidgetBorder = true
+baseRadius = "large"
+chartCategoricalColors = ["#007F9E", "#2274B5", "#4DBBD5", "#6B83B6", "#D98935", "#768B98"]
+chartSequentialColors = ["#E6F5FC", "#B5E3F3", "#78CBDF", "#31A5C4", "#007F9E", "#16516D"]
+
+[theme.sidebar]
+backgroundColor = "#EFF8FD"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#16354A"
