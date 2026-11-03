@@ -80,13 +80,34 @@ class DeliveryTests(unittest.TestCase):
         ]:
             self.assertNotIn(forbidden, workflow)
 
-    def test_promotion_has_only_explicit_manual_trigger(self):
+    def test_promotion_only_accepts_protected_main_code_or_manual_dispatch(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        for forbidden in ["  push:", "  pull_request:", "  schedule:", "workflow_run:"]:
+        for forbidden in ["  pull_request:", "  schedule:", "workflow_run:"]:
             self.assertNotIn(forbidden, workflow)
+        self.assertIn("  push:", workflow)
+        self.assertIn("    branches: [main]", workflow)
+        self.assertIn("    paths:", workflow)
         self.assertIn("environment: release", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+
+    def test_active_refresh_refuses_promotion_before_mutations(self):
+        sfn = Mock()
+        sfn.list_executions.return_value = {"executions": [{"status": "RUNNING"}]}
+        with patch.object(delivery.boto3, "client", return_value=sfn):
+            with self.assertRaisesRegex(ValueError, "active"):
+                delivery.require_idle()
+
+    def test_idle_requires_no_running_workflow_or_task(self):
+        sfn, ecs = Mock(), Mock()
+        sfn.list_executions.return_value = {"executions": []}
+        ecs.list_tasks.return_value = {"taskArns": []}
+        with patch.object(delivery.boto3, "client", side_effect=[sfn, ecs]):
+            delivery.require_idle()
+        ecs.list_tasks.return_value = {"taskArns": ["task"]}
+        with patch.object(delivery.boto3, "client", side_effect=[sfn, ecs]):
+            with self.assertRaisesRegex(ValueError, "active"):
+                delivery.require_idle()
 
 
 if __name__ == "__main__":
