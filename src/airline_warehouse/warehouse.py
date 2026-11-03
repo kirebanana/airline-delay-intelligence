@@ -105,9 +105,15 @@ def build_candidate(
         )
     producer = producer_lock(journal.path)
     env = os.environ.copy()
-    config = tomllib.loads((Path.home() / ".snowflake/config.toml").read_text())
+    if "AIRLINE_CLOUD_IDENTITY" in env:
+        if env["AIRLINE_CLOUD_IDENTITY"] != "warehouse":
+            raise ValueError("Only the warehouse task may build candidates")
+        key_path = "/not-configured"
+    else:
+        config = tomllib.loads((Path.home() / ".snowflake/config.toml").read_text())
+        key_path = config["connections"]["airline"]["private_key_file"]
     env.update(
-        AIRLINE_DBT_KEY=config["connections"]["airline"]["private_key_file"],
+        AIRLINE_DBT_KEY=key_path,
         AIRLINE_DBT_SCHEMA=schema,
         AIRLINE_QUERY_TAG="airline:batch05-10:" + schema,
     )
@@ -176,6 +182,8 @@ def build_candidate(
                     {"expected_rows": plan["expected_rows"], "weather_enabled": weather is not None}
                 ),
             ]
+            if "AIRLINE_CLOUD_IDENTITY" in env:
+                command.extend(["--target", "cloud"])
             returncode = run_dbt_child(command, env, output, deadline, journal)
             if returncode:
                 results_path = output / "dbt/run_results.json"

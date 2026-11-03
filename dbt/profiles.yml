@@ -2,7 +2,7 @@
 airline_warehouse:
   target: dev
   outputs:
-    dev:
+    dev: &warehouse
       type: snowflake
       account: LMOOEWP-DQ15927
       user: AIRLINE_DEV
@@ -18,3 +18,7 @@ airline_warehouse:
       retry_all: false
       client_session_keep_alive: false
       query_tag: "{{ env_var('AIRLINE_QUERY_TAG', 'airline:batch05-10:parse') }}"
+    cloud:
+      <<: *warehouse
+      # Pinned secret fetched only in the finite dbt child driver boundary.
+      private_key_path: null

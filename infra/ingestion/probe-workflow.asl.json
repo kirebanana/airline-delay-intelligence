@@ -1,0 +1,191 @@
+{
+  "Comment": "Secret-free integration qualification only; no data refresh",
+  "StartAt": "RunProbe",
+  "TimeoutSeconds": 600,
+  "States": {
+    "RunProbe": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "TimeoutSeconds": 300,
+      "Parameters": {
+        "Cluster": "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs",
+        "TaskDefinition": "arn:aws:ecs:us-east-2:336805808138:task-definition/airline-probe-warehouse:1",
+        "LaunchType": "FARGATE",
+        "PlatformVersion": "1.4.0",
+        "ClientToken.$": "$.probe.request_id",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "subnet-018dbfd8d11f5e279"
+            ],
+            "SecurityGroups": [
+              "sg-0c380149c18e4b13c"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "job",
+              "Environment": [
+                {
+                  "Name": "AIRLINE_PROBE_REQUEST",
+                  "Value.$": "States.JsonToString($.probe)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ResultPath": "$.task",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "CheckExit"
+    },
+    "CheckExit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.task.Containers[0].ExitCode",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.task.Containers[0].ExitCode",
+              "NumericEquals": 0
+            }
+          ],
+          "Next": "HeadReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "HeadReport": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/build/{}/connectivity.json', $.probe.request_id)"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "CheckSize"
+    },
+    "CheckSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 16384
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "ReadReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "ReadReport": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/build/{}/connectivity.json', $.probe.request_id)"
+      },
+      "ResultPath": "$.report",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "DecodeReport"
+    },
+    "DecodeReport": {
+      "Type": "Pass",
+      "Parameters": {
+        "result.$": "States.StringToJson($.report.Body)",
+        "probe.$": "$.probe",
+        "task.$": "$.task",
+        "expected_caller.$": "States.Format('arn:aws:sts::336805808138:assumed-role/airline-job-warehouse/{}', States.ArrayGetItem(States.StringSplit($.task.TaskArn, '/'), 2))"
+      },
+      "Next": "CheckReport"
+    },
+    "CheckReport": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.result.request_id",
+              "StringEqualsPath": "$.probe.request_id"
+            },
+            {
+              "Variable": "$.result.caller_arn",
+              "StringEqualsPath": "$.expected_caller"
+            },
+            {
+              "Variable": "$.result.kind",
+              "StringEquals": "warehouse"
+            },
+            {
+              "Variable": "$.result.status",
+              "StringEquals": "CONNECTIVITY_ONLY"
+            },
+            {
+              "Variable": "$.result.state_access",
+              "StringEquals": "DENIED"
+            },
+            {
+              "Variable": "$.result.manifest_sha256",
+              "StringEqualsPath": "$.probe.manifest_sha256"
+            },
+            {
+              "Variable": "$.result.completed_epoch",
+              "NumericLessThanEqualsPath": "$.probe.deadline_epoch"
+            },
+            {
+              "Variable": "$.result.snowflake_authenticated",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "Qualified"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "Qualified": {
+      "Type": "Succeed"
+    },
+    "Uncertain": {
+      "Type": "Fail",
+      "Error": "RECOVERY_REQUIRED",
+      "Cause": "Inspect exact execution/tasks/reports before a deliberate new attempt"
+    }
+  }
+}

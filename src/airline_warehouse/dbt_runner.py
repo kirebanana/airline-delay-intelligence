@@ -42,6 +42,10 @@ def _run(journal):
         remaining = int(deadline - time.monotonic())
         if remaining < 1:
             raise TimeoutError("dbt connection deadline exhausted")
+        if "AIRLINE_CLOUD_IDENTITY" in os.environ:
+            from airline_warehouse.cloud_identity import dbt_parameters
+
+            kwargs = dbt_parameters(kwargs, os.environ["AIRLINE_CLOUD_IDENTITY"], deadline=deadline)
         kwargs.update(
             login_timeout=min(15, remaining),
             network_timeout=min(30, remaining),
@@ -49,6 +53,23 @@ def _run(journal):
         )
         connection = original_connect(**kwargs)
         journal.session(connection, "builder")
+        if "AIRLINE_CLOUD_IDENTITY" in os.environ:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("USE SECONDARY ROLES NONE")
+                    cursor.execute(
+                        "SELECT CURRENT_ACCOUNT(),CURRENT_REGION(),CURRENT_ROLE(),CURRENT_USER()"
+                    )
+                    if cursor.fetchone() != (
+                        "DC50202",
+                        "AWS_US_EAST_2",
+                        "AIRLINE_DEV_ROLE",
+                        "AIRLINE_DEV",
+                    ):
+                        raise ValueError("dbt connected to unexpected workload identity")
+            except BaseException:
+                connection.close()
+                raise
         return connection
 
     SnowflakeCursor.execute = execute
@@ -58,7 +79,20 @@ def _run(journal):
 
 
 def main():
-    journal = WorkJournal(os.environ["AIRLINE_WORK_JOURNAL"])
+    if "AIRLINE_CLOUD_IDENTITY" in os.environ:
+        from airline_warehouse.cloud_artifacts import ReportStore
+        from airline_warehouse.connectivity_probe import sdk_factory
+
+        if os.environ["AIRLINE_CLOUD_IDENTITY"] != "warehouse":
+            raise ValueError("Only warehouse task may execute dbt")
+        store = ReportStore(
+            sdk_factory("s3", 5), "warehouse", os.environ["AIRLINE_CLOUD_REQUEST_ID"]
+        )
+        journal = store.journal(
+            os.environ["AIRLINE_WORK_JOURNAL"], deadline=float(os.environ["AIRLINE_DBT_DEADLINE"])
+        )
+    else:
+        journal = WorkJournal(os.environ["AIRLINE_WORK_JOURNAL"])
     with producer_lock(journal.path):
         Path(os.environ["AIRLINE_CHILD_READY"]).write_text(str(os.getpid()))
         handshake_deadline = min(float(os.environ["AIRLINE_DBT_DEADLINE"]), time.monotonic() + 15)

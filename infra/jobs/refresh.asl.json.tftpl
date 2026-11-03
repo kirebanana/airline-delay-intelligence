@@ -1,0 +1,1856 @@
+{
+  "StartAt": "Initialize",
+  "TimeoutSeconds": 3600,
+  "States": {
+    "admitCompose": {
+      "Type": "Pass",
+      "ResultPath": "$.request",
+      "Next": "admitRun",
+      "Parameters": {
+        "contract": "cloud-stage-request-v2",
+        "mode": "admit",
+        "request_id.$": "$.run.request_id",
+        "target.$": "$.run.target",
+        "deadline_epoch.$": "$.run.deadlines.admit",
+        "artifacts.$": "$.run.artifacts",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "deployment": {
+          "execution_arn.$": "$$.Execution.Id",
+          "workflow_version_arn.$": "$.run.workflow_version_arn",
+          "task_definition_arn": "${task_publisher}",
+          "image_digest": "${image_digest}",
+          "processing_contract": "${processing_contract}",
+          "attempt": 1
+        }
+      }
+    },
+    "admitRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "TimeoutSeconds": 420,
+      "Parameters": {
+        "Cluster": "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs",
+        "TaskDefinition": "${task_publisher}",
+        "LaunchType": "FARGATE",
+        "PlatformVersion": "1.4.0",
+        "ClientToken.$": "States.Format('{}-admit', $.run.request_id)",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "subnet-018dbfd8d11f5e279"
+            ],
+            "SecurityGroups": [
+              "sg-0c380149c18e4b13c"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "job",
+              "Environment": [
+                {
+                  "Name": "AIRLINE_STAGE_REQUEST",
+                  "Value.$": "States.JsonToString($.request)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ResultSelector": {
+        "arn.$": "$.TaskArn",
+        "definition.$": "$.TaskDefinitionArn",
+        "exit.$": "$.Containers[0].ExitCode",
+        "image.$": "$.Containers[0].ImageDigest"
+      },
+      "ResultPath": "$.task",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "admitCheckExit"
+    },
+    "admitControlHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/publication/{}/admit.json', $.run.request_id)"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "admitControlSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "admitControlSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 16384
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "admitControlGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitControlGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/publication/{}/admit.json', $.run.request_id)"
+      },
+      "ResultPath": "$.raw_control",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "admitDecodeControl"
+    },
+    "admitCheckExit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.task.exit",
+              "NumericEquals": 0
+            },
+            {
+              "Variable": "$.task.definition",
+              "StringEquals": "${task_publisher}"
+            },
+            {
+              "Variable": "$.task.image",
+              "StringEquals": "${image_digest}"
+            }
+          ],
+          "Next": "admitControlHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitDecodeControl": {
+      "Type": "Pass",
+      "Next": "admitCheckControl",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "States.StringToJson($.raw_control.Body)",
+        "inputs_expected.$": "$.run.inputs_sha256"
+      }
+    },
+    "admitCheckControl": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.contract",
+              "StringEquals": "ecs-stage-result-v1"
+            },
+            {
+              "Variable": "$.control.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.control.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.control.target",
+              "StringEqualsPath": "$.run.target"
+            },
+            {
+              "Variable": "$.control.stage",
+              "StringEquals": "publisher"
+            },
+            {
+              "Variable": "$.control.task_arn",
+              "StringEqualsPath": "$.task.arn"
+            },
+            {
+              "Variable": "$.control.task_definition_arn",
+              "StringEquals": "${task_publisher}"
+            },
+            {
+              "Variable": "$.control.image_digest",
+              "StringEquals": "${image_digest}"
+            },
+            {
+              "Variable": "$.control.processing_contract",
+              "StringEquals": "${processing_contract}"
+            },
+            {
+              "Variable": "$.control.execution_arn",
+              "StringEqualsPath": "$.request.deployment.execution_arn"
+            },
+            {
+              "Variable": "$.control.workflow_version_arn",
+              "StringEqualsPath": "$.run.workflow_version_arn"
+            },
+            {
+              "Variable": "$.control.attempt",
+              "NumericEquals": 1
+            },
+            {
+              "Variable": "$.control.deadline_epoch",
+              "NumericEqualsPath": "$.request.deadline_epoch"
+            },
+            {
+              "Variable": "$.control.completed_epoch",
+              "NumericLessThanEqualsPath": "$.request.deadline_epoch"
+            }
+          ],
+          "Next": "admitPrepareReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitPrepareReport": {
+      "Type": "Pass",
+      "Next": "admitCheckReference",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "inputs_expected.$": "$.inputs_expected",
+        "inputs_actual.$": "$.control.inputs_sha256",
+        "expected_report.$": "States.Format('reports/publication/{}/admit-report.json', $.run.request_id)"
+      }
+    },
+    "admitReportHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "admitReportSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "admitReportSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 10000
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "admitReportGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitReportGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.raw_report",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "admitHashReport"
+    },
+    "admitCheckReference": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.output.key",
+              "StringEqualsPath": "$.expected_report"
+            },
+            {
+              "Variable": "$.inputs_actual",
+              "StringEqualsPath": "$.inputs_expected"
+            }
+          ],
+          "Next": "admitReportHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitHashReport": {
+      "Type": "Pass",
+      "ResultPath": "$.hash",
+      "Next": "admitCheckHash",
+      "Parameters": {
+        "actual.$": "States.Hash($.raw_report.Body, 'SHA-256')"
+      }
+    },
+    "admitCheckHash": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.hash.actual",
+              "StringEqualsPath": "$.control.output.sha256"
+            }
+          ],
+          "Next": "admitDecodeReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitDecodeReport": {
+      "Type": "Pass",
+      "Next": "admitCheckReport",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "stage.$": "States.StringToJson($.raw_report.Body)"
+      }
+    },
+    "admitCheckReport": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.stage.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.stage.mode",
+              "StringEquals": "admit"
+            },
+            {
+              "Variable": "$.stage.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.stage.target",
+              "StringEqualsPath": "$.run.target"
+            }
+          ],
+          "Next": "admitOutcome"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "admitAdvance": {
+      "Type": "Pass",
+      "Next": "acquisitionCompose",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.stage.budget",
+        "authority.$": "$.stage.authority",
+        "dependency.$": "$.dependency"
+      }
+    },
+    "acquisitionCompose": {
+      "Type": "Pass",
+      "ResultPath": "$.request",
+      "Next": "acquisitionRun",
+      "Parameters": {
+        "contract": "cloud-stage-request-v2",
+        "mode": "acquisition",
+        "request_id.$": "$.run.request_id",
+        "target.$": "$.run.target",
+        "deadline_epoch.$": "$.run.deadlines.acquisition",
+        "artifacts.$": "$.run.artifacts",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "deployment": {
+          "execution_arn.$": "$$.Execution.Id",
+          "workflow_version_arn.$": "$.run.workflow_version_arn",
+          "task_definition_arn": "${task_acquisition}",
+          "image_digest": "${image_digest}",
+          "processing_contract": "${processing_contract}",
+          "attempt": 1
+        }
+      }
+    },
+    "acquisitionRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "TimeoutSeconds": 420,
+      "Parameters": {
+        "Cluster": "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs",
+        "TaskDefinition": "${task_acquisition}",
+        "LaunchType": "FARGATE",
+        "PlatformVersion": "1.4.0",
+        "ClientToken.$": "States.Format('{}-acquisition', $.run.request_id)",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "subnet-018dbfd8d11f5e279"
+            ],
+            "SecurityGroups": [
+              "sg-0c380149c18e4b13c"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "job",
+              "Environment": [
+                {
+                  "Name": "AIRLINE_STAGE_REQUEST",
+                  "Value.$": "States.JsonToString($.request)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ResultSelector": {
+        "arn.$": "$.TaskArn",
+        "definition.$": "$.TaskDefinitionArn",
+        "exit.$": "$.Containers[0].ExitCode",
+        "image.$": "$.Containers[0].ImageDigest"
+      },
+      "ResultPath": "$.task",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "acquisitionCheckExit"
+    },
+    "acquisitionControlHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/acquisition/{}/acquisition.json', $.run.request_id)"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "acquisitionControlSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "acquisitionControlSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 16384
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "acquisitionControlGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionControlGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/acquisition/{}/acquisition.json', $.run.request_id)"
+      },
+      "ResultPath": "$.raw_control",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "acquisitionDecodeControl"
+    },
+    "acquisitionCheckExit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.task.exit",
+              "NumericEquals": 0
+            },
+            {
+              "Variable": "$.task.definition",
+              "StringEquals": "${task_acquisition}"
+            },
+            {
+              "Variable": "$.task.image",
+              "StringEquals": "${image_digest}"
+            }
+          ],
+          "Next": "acquisitionControlHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionDecodeControl": {
+      "Type": "Pass",
+      "Next": "acquisitionCheckControl",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "States.StringToJson($.raw_control.Body)",
+        "inputs_expected.$": "$.run.inputs_sha256"
+      }
+    },
+    "acquisitionCheckControl": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.contract",
+              "StringEquals": "ecs-stage-result-v1"
+            },
+            {
+              "Variable": "$.control.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.control.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.control.target",
+              "StringEqualsPath": "$.run.target"
+            },
+            {
+              "Variable": "$.control.stage",
+              "StringEquals": "acquisition"
+            },
+            {
+              "Variable": "$.control.task_arn",
+              "StringEqualsPath": "$.task.arn"
+            },
+            {
+              "Variable": "$.control.task_definition_arn",
+              "StringEquals": "${task_acquisition}"
+            },
+            {
+              "Variable": "$.control.image_digest",
+              "StringEquals": "${image_digest}"
+            },
+            {
+              "Variable": "$.control.processing_contract",
+              "StringEquals": "${processing_contract}"
+            },
+            {
+              "Variable": "$.control.execution_arn",
+              "StringEqualsPath": "$.request.deployment.execution_arn"
+            },
+            {
+              "Variable": "$.control.workflow_version_arn",
+              "StringEqualsPath": "$.run.workflow_version_arn"
+            },
+            {
+              "Variable": "$.control.attempt",
+              "NumericEquals": 1
+            },
+            {
+              "Variable": "$.control.deadline_epoch",
+              "NumericEqualsPath": "$.request.deadline_epoch"
+            },
+            {
+              "Variable": "$.control.completed_epoch",
+              "NumericLessThanEqualsPath": "$.request.deadline_epoch"
+            }
+          ],
+          "Next": "acquisitionPrepareReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionPrepareReport": {
+      "Type": "Pass",
+      "Next": "acquisitionCheckReference",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "inputs_expected.$": "$.inputs_expected",
+        "inputs_actual.$": "$.control.inputs_sha256",
+        "expected_report.$": "States.Format('reports/acquisition/{}/acquisition-report.json', $.run.request_id)"
+      }
+    },
+    "acquisitionReportHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "acquisitionReportSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "acquisitionReportSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 10000
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "acquisitionReportGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionReportGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.raw_report",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "acquisitionHashReport"
+    },
+    "acquisitionCheckReference": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.output.key",
+              "StringEqualsPath": "$.expected_report"
+            },
+            {
+              "Variable": "$.inputs_actual",
+              "StringEqualsPath": "$.inputs_expected"
+            }
+          ],
+          "Next": "acquisitionReportHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionHashReport": {
+      "Type": "Pass",
+      "ResultPath": "$.hash",
+      "Next": "acquisitionCheckHash",
+      "Parameters": {
+        "actual.$": "States.Hash($.raw_report.Body, 'SHA-256')"
+      }
+    },
+    "acquisitionCheckHash": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.hash.actual",
+              "StringEqualsPath": "$.control.output.sha256"
+            }
+          ],
+          "Next": "acquisitionDecodeReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionDecodeReport": {
+      "Type": "Pass",
+      "Next": "acquisitionCheckReport",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "stage.$": "States.StringToJson($.raw_report.Body)"
+      }
+    },
+    "acquisitionCheckReport": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.stage.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.stage.mode",
+              "StringEquals": "acquisition"
+            },
+            {
+              "Variable": "$.stage.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.stage.target",
+              "StringEqualsPath": "$.run.target"
+            }
+          ],
+          "Next": "acquisitionAdvance"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "acquisitionAdvance": {
+      "Type": "Pass",
+      "Next": "warehouseCompose",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.stage.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency"
+      }
+    },
+    "warehouseCompose": {
+      "Type": "Pass",
+      "ResultPath": "$.request",
+      "Next": "warehouseRun",
+      "Parameters": {
+        "contract": "cloud-stage-request-v2",
+        "mode": "warehouse",
+        "request_id.$": "$.run.request_id",
+        "target.$": "$.run.target",
+        "deadline_epoch.$": "$.run.deadlines.warehouse",
+        "artifacts.$": "$.run.artifacts",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "deployment": {
+          "execution_arn.$": "$$.Execution.Id",
+          "workflow_version_arn.$": "$.run.workflow_version_arn",
+          "task_definition_arn": "${task_warehouse}",
+          "image_digest": "${image_digest}",
+          "processing_contract": "${processing_contract}",
+          "attempt": 1
+        }
+      }
+    },
+    "warehouseRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "TimeoutSeconds": 2850,
+      "Parameters": {
+        "Cluster": "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs",
+        "TaskDefinition": "${task_warehouse}",
+        "LaunchType": "FARGATE",
+        "PlatformVersion": "1.4.0",
+        "ClientToken.$": "States.Format('{}-warehouse', $.run.request_id)",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "subnet-018dbfd8d11f5e279"
+            ],
+            "SecurityGroups": [
+              "sg-0c380149c18e4b13c"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "job",
+              "Environment": [
+                {
+                  "Name": "AIRLINE_STAGE_REQUEST",
+                  "Value.$": "States.JsonToString($.request)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ResultSelector": {
+        "arn.$": "$.TaskArn",
+        "definition.$": "$.TaskDefinitionArn",
+        "exit.$": "$.Containers[0].ExitCode",
+        "image.$": "$.Containers[0].ImageDigest"
+      },
+      "ResultPath": "$.task",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "warehouseCheckExit"
+    },
+    "warehouseControlHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/build/{}/warehouse.json', $.run.request_id)"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "warehouseControlSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "warehouseControlSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 16384
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "warehouseControlGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseControlGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/build/{}/warehouse.json', $.run.request_id)"
+      },
+      "ResultPath": "$.raw_control",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "warehouseDecodeControl"
+    },
+    "warehouseCheckExit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.task.exit",
+              "NumericEquals": 0
+            },
+            {
+              "Variable": "$.task.definition",
+              "StringEquals": "${task_warehouse}"
+            },
+            {
+              "Variable": "$.task.image",
+              "StringEquals": "${image_digest}"
+            }
+          ],
+          "Next": "warehouseControlHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseDecodeControl": {
+      "Type": "Pass",
+      "Next": "warehouseCheckControl",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "States.StringToJson($.raw_control.Body)",
+        "inputs_expected.$": "$.run.inputs_sha256"
+      }
+    },
+    "warehouseCheckControl": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.contract",
+              "StringEquals": "ecs-stage-result-v1"
+            },
+            {
+              "Variable": "$.control.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.control.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.control.target",
+              "StringEqualsPath": "$.run.target"
+            },
+            {
+              "Variable": "$.control.stage",
+              "StringEquals": "warehouse"
+            },
+            {
+              "Variable": "$.control.task_arn",
+              "StringEqualsPath": "$.task.arn"
+            },
+            {
+              "Variable": "$.control.task_definition_arn",
+              "StringEquals": "${task_warehouse}"
+            },
+            {
+              "Variable": "$.control.image_digest",
+              "StringEquals": "${image_digest}"
+            },
+            {
+              "Variable": "$.control.processing_contract",
+              "StringEquals": "${processing_contract}"
+            },
+            {
+              "Variable": "$.control.execution_arn",
+              "StringEqualsPath": "$.request.deployment.execution_arn"
+            },
+            {
+              "Variable": "$.control.workflow_version_arn",
+              "StringEqualsPath": "$.run.workflow_version_arn"
+            },
+            {
+              "Variable": "$.control.attempt",
+              "NumericEquals": 1
+            },
+            {
+              "Variable": "$.control.deadline_epoch",
+              "NumericEqualsPath": "$.request.deadline_epoch"
+            },
+            {
+              "Variable": "$.control.completed_epoch",
+              "NumericLessThanEqualsPath": "$.request.deadline_epoch"
+            }
+          ],
+          "Next": "warehousePrepareReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehousePrepareReport": {
+      "Type": "Pass",
+      "Next": "warehouseCheckReference",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "inputs_expected.$": "$.inputs_expected",
+        "inputs_actual.$": "$.control.inputs_sha256",
+        "expected_report.$": "States.Format('reports/build/{}/warehouse-report.json', $.run.request_id)"
+      }
+    },
+    "warehouseReportHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "warehouseReportSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "warehouseReportSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 10000
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "warehouseReportGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseReportGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.raw_report",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "warehouseHashReport"
+    },
+    "warehouseCheckReference": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.output.key",
+              "StringEqualsPath": "$.expected_report"
+            },
+            {
+              "Variable": "$.inputs_actual",
+              "StringEqualsPath": "$.inputs_expected"
+            }
+          ],
+          "Next": "warehouseReportHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseHashReport": {
+      "Type": "Pass",
+      "ResultPath": "$.hash",
+      "Next": "warehouseCheckHash",
+      "Parameters": {
+        "actual.$": "States.Hash($.raw_report.Body, 'SHA-256')"
+      }
+    },
+    "warehouseCheckHash": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.hash.actual",
+              "StringEqualsPath": "$.control.output.sha256"
+            }
+          ],
+          "Next": "warehouseDecodeReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseDecodeReport": {
+      "Type": "Pass",
+      "Next": "warehouseCheckReport",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "stage.$": "States.StringToJson($.raw_report.Body)"
+      }
+    },
+    "warehouseCheckReport": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.stage.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.stage.mode",
+              "StringEquals": "warehouse"
+            },
+            {
+              "Variable": "$.stage.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.stage.target",
+              "StringEqualsPath": "$.run.target"
+            }
+          ],
+          "Next": "warehouseAdvance"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "warehouseAdvance": {
+      "Type": "Pass",
+      "Next": "publishCompose",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.stage.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.control.output"
+      }
+    },
+    "publishCompose": {
+      "Type": "Pass",
+      "ResultPath": "$.request",
+      "Next": "publishRun",
+      "Parameters": {
+        "contract": "cloud-stage-request-v2",
+        "mode": "publish",
+        "request_id.$": "$.run.request_id",
+        "target.$": "$.run.target",
+        "deadline_epoch.$": "$.run.deadlines.publish",
+        "artifacts.$": "$.run.artifacts",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "deployment": {
+          "execution_arn.$": "$$.Execution.Id",
+          "workflow_version_arn.$": "$.run.workflow_version_arn",
+          "task_definition_arn": "${task_publisher}",
+          "image_digest": "${image_digest}",
+          "processing_contract": "${processing_contract}",
+          "attempt": 1
+        }
+      }
+    },
+    "publishRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "TimeoutSeconds": 420,
+      "Parameters": {
+        "Cluster": "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs",
+        "TaskDefinition": "${task_publisher}",
+        "LaunchType": "FARGATE",
+        "PlatformVersion": "1.4.0",
+        "ClientToken.$": "States.Format('{}-publish', $.run.request_id)",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": [
+              "subnet-018dbfd8d11f5e279"
+            ],
+            "SecurityGroups": [
+              "sg-0c380149c18e4b13c"
+            ],
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "job",
+              "Environment": [
+                {
+                  "Name": "AIRLINE_STAGE_REQUEST",
+                  "Value.$": "States.JsonToString($.request)"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "ResultSelector": {
+        "arn.$": "$.TaskArn",
+        "definition.$": "$.TaskDefinitionArn",
+        "exit.$": "$.Containers[0].ExitCode",
+        "image.$": "$.Containers[0].ImageDigest"
+      },
+      "ResultPath": "$.task",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "publishCheckExit"
+    },
+    "publishControlHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/publication/{}/publish.json', $.run.request_id)"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "publishControlSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "publishControlSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 16384
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "publishControlGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishControlGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "States.Format('reports/publication/{}/publish.json', $.run.request_id)"
+      },
+      "ResultPath": "$.raw_control",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "publishDecodeControl"
+    },
+    "publishCheckExit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.task.exit",
+              "NumericEquals": 0
+            },
+            {
+              "Variable": "$.task.definition",
+              "StringEquals": "${task_publisher}"
+            },
+            {
+              "Variable": "$.task.image",
+              "StringEquals": "${image_digest}"
+            }
+          ],
+          "Next": "publishControlHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishDecodeControl": {
+      "Type": "Pass",
+      "Next": "publishCheckControl",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "States.StringToJson($.raw_control.Body)",
+        "inputs_expected.$": "$.run.inputs_sha256"
+      }
+    },
+    "publishCheckControl": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.contract",
+              "StringEquals": "ecs-stage-result-v1"
+            },
+            {
+              "Variable": "$.control.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.control.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.control.target",
+              "StringEqualsPath": "$.run.target"
+            },
+            {
+              "Variable": "$.control.stage",
+              "StringEquals": "publisher"
+            },
+            {
+              "Variable": "$.control.task_arn",
+              "StringEqualsPath": "$.task.arn"
+            },
+            {
+              "Variable": "$.control.task_definition_arn",
+              "StringEquals": "${task_publisher}"
+            },
+            {
+              "Variable": "$.control.image_digest",
+              "StringEquals": "${image_digest}"
+            },
+            {
+              "Variable": "$.control.processing_contract",
+              "StringEquals": "${processing_contract}"
+            },
+            {
+              "Variable": "$.control.execution_arn",
+              "StringEqualsPath": "$.request.deployment.execution_arn"
+            },
+            {
+              "Variable": "$.control.workflow_version_arn",
+              "StringEqualsPath": "$.run.workflow_version_arn"
+            },
+            {
+              "Variable": "$.control.attempt",
+              "NumericEquals": 1
+            },
+            {
+              "Variable": "$.control.deadline_epoch",
+              "NumericEqualsPath": "$.request.deadline_epoch"
+            },
+            {
+              "Variable": "$.control.completed_epoch",
+              "NumericLessThanEqualsPath": "$.request.deadline_epoch"
+            }
+          ],
+          "Next": "publishPrepareReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishPrepareReport": {
+      "Type": "Pass",
+      "Next": "publishCheckReference",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "inputs_expected.$": "$.inputs_expected",
+        "inputs_actual.$": "$.control.inputs_sha256",
+        "expected_report.$": "States.Format('reports/publication/{}/publish-report.json', $.run.request_id)"
+      }
+    },
+    "publishReportHead": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:headObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.head",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "Next": "publishReportSize",
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ]
+    },
+    "publishReportSize": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericLessThanEquals": 10000
+            },
+            {
+              "Variable": "$.head.ContentLength",
+              "NumericGreaterThan": 0
+            }
+          ],
+          "Next": "publishReportGet"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishReportGet": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "airline-bts-336805808138-us-east-2",
+        "Key.$": "$.control.output.key"
+      },
+      "ResultPath": "$.raw_report",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "Uncertain"
+        }
+      ],
+      "TimeoutSeconds": 15,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "S3.SlowDown",
+            "S3.ServiceUnavailable",
+            "S3.InternalError"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 1
+        }
+      ],
+      "Next": "publishHashReport"
+    },
+    "publishCheckReference": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.control.output.key",
+              "StringEqualsPath": "$.expected_report"
+            },
+            {
+              "Variable": "$.inputs_actual",
+              "StringEqualsPath": "$.inputs_expected"
+            }
+          ],
+          "Next": "publishReportHead"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishHashReport": {
+      "Type": "Pass",
+      "ResultPath": "$.hash",
+      "Next": "publishCheckHash",
+      "Parameters": {
+        "actual.$": "States.Hash($.raw_report.Body, 'SHA-256')"
+      }
+    },
+    "publishCheckHash": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.hash.actual",
+              "StringEqualsPath": "$.control.output.sha256"
+            }
+          ],
+          "Next": "publishDecodeReport"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishDecodeReport": {
+      "Type": "Pass",
+      "Next": "publishCheckReport",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.budget",
+        "authority.$": "$.authority",
+        "dependency.$": "$.dependency",
+        "task.$": "$.task",
+        "request.$": "$.request",
+        "control.$": "$.control",
+        "stage.$": "States.StringToJson($.raw_report.Body)"
+      }
+    },
+    "publishCheckReport": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.stage.status",
+              "StringEquals": "COMPLETED"
+            },
+            {
+              "Variable": "$.stage.mode",
+              "StringEquals": "publish"
+            },
+            {
+              "Variable": "$.stage.request_id",
+              "StringEqualsPath": "$.run.request_id"
+            },
+            {
+              "Variable": "$.stage.target",
+              "StringEqualsPath": "$.run.target"
+            }
+          ],
+          "Next": "publishAdvance"
+        }
+      ],
+      "Default": "Uncertain"
+    },
+    "publishAdvance": {
+      "Type": "Pass",
+      "InputPath": "$.stage",
+      "End": true
+    },
+    "admitOutcome": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.stage.reused",
+          "BooleanEquals": true,
+          "Next": "ReplayComplete"
+        }
+      ],
+      "Default": "admitAdvance"
+    },
+    "ReplayComplete": {
+      "Type": "Pass",
+      "InputPath": "$.stage",
+      "End": true
+    },
+    "Uncertain": {
+      "Type": "Fail",
+      "Error": "RECOVERY_REQUIRED",
+      "Cause": "No retry/takeover: reconcile this execution, task and query evidence"
+    },
+    "Initialize": {
+      "Type": "Pass",
+      "Next": "admitCompose",
+      "Parameters": {
+        "run.$": "$.run",
+        "budget.$": "$.run.budget",
+        "authority": null,
+        "dependency": null
+      }
+    }
+  }
+}

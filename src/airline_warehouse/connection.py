@@ -10,6 +10,41 @@ from pathlib import Path
 from airline_warehouse.deadlines import DeadlineConnection
 
 
+def _cloud_connection(kind, query_tag, deadline):
+    from airline_warehouse.cloud_identity import SECRETS, private_key
+
+    key = private_key(kind, os.environ["AIRLINE_CLOUD_IDENTITY"], deadline=deadline)
+    _, _, _, user, role = SECRETS[kind]
+    conn = _login(
+        dict(
+            account="LMOOEWP-DQ15927",
+            user=user,
+            role=role,
+            database="AIRLINE_DB",
+            warehouse="AIRLINE_DEV_WH",
+            authenticator="SNOWFLAKE_JWT",
+            private_key=key,
+            session_parameters={
+                "STATEMENT_TIMEOUT_IN_SECONDS": 600,
+                "STATEMENT_QUEUED_TIMEOUT_IN_SECONDS": 60,
+                "LOCK_TIMEOUT": 5,
+                "QUERY_TAG": query_tag,
+            },
+        ),
+        deadline,
+    )
+    try:
+        with DeadlineConnection(conn, 600, deadline=deadline).cursor() as cur:
+            cur.execute("USE SECONDARY ROLES NONE")
+            cur.execute("SELECT CURRENT_ACCOUNT(),CURRENT_REGION(),CURRENT_ROLE(),CURRENT_USER()")
+            if cur.fetchone() != ("DC50202", "AWS_US_EAST_2", role, user):
+                raise ValueError("Unexpected workload account/region/role/user")
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
 def _login(params, deadline):
     import snowflake.connector
     from snowflake.connector.errors import OperationalError
@@ -36,6 +71,8 @@ def _login(params, deadline):
 def connect(query_tag="airline:raw-ingest:v1", *, deadline=None):
     if not re.fullmatch(r"airline:[A-Za-z0-9:_-]{1,120}", query_tag):
         raise ValueError("Query tag must be a bounded project identifier")
+    if "AIRLINE_CLOUD_IDENTITY" in os.environ:
+        return _cloud_connection("builder", query_tag, deadline)
     path = Path.home() / ".snowflake/config.toml"
     config = tomllib.loads(path.read_text())["connections"]["airline"]
     expected = {
@@ -79,6 +116,8 @@ def connect(query_tag="airline:raw-ingest:v1", *, deadline=None):
 
 def connect_as(kind: str, *, deadline=None):
     """Separate service identities; never let a caller select an arbitrary role."""
+    if "AIRLINE_CLOUD_IDENTITY" in os.environ:
+        return _cloud_connection(kind, "airline:cloud:" + kind, deadline)
     if kind == "builder":
         return connect("airline:batch05-10:builder", deadline=deadline)
     if kind not in ("publisher", "reader"):

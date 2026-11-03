@@ -184,6 +184,13 @@ resource "aws_vpc_endpoint" "s3" {
         Sid      = "RegionalEcrLayers", Effect = "Allow", Principal = "*"
         Action   = ["s3:GetObject"]
         Resource = ["arn:aws:s3:::prod-us-east-2-starport-layer-bucket/*"]
+      },
+      {
+        # Qualified Snowflake result chunks use presigned URLs from this exact
+        # account-specific result prefix. No task IAM, bucket/list/write grant.
+        Sid = "SnowflakeAccountResultChunks", Effect = "Allow", Principal = "*"
+        Action = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::sfc-oh-ds1-167-customer-stage/aqie2000-s/results/*"]
       }
     ]
   })
