@@ -67,9 +67,9 @@ def login():
     if (
         os.environ["GITHUB_REPOSITORY"] != "kirebanana/airline-delay-intelligence"
         or os.environ["GITHUB_REF"] != "refs/heads/main"
-        or os.environ["GITHUB_EVENT_NAME"] != "workflow_dispatch"
+        or os.environ["GITHUB_EVENT_NAME"] not in {"workflow_dispatch", "push"}
     ):
-        raise ValueError("Only an explicit trusted-main dispatch may obtain release credentials")
+        raise ValueError("Only protected-main pushes or explicit dispatches may obtain credentials")
     wrong_audience = expect_denied(lambda: assume("airline-invalid-audience"))
     credentials = assume()["Credentials"]
     names = {
@@ -145,7 +145,20 @@ def container(image, *command, capture=False):
     )
 
 
+def require_idle():
+    """Observed-idle preference, not a cross-system lock or automatic takeover."""
+    states = boto3.client("stepfunctions", region_name=REGION)
+    result = states.list_executions(stateMachineArn=WORKFLOW, statusFilter="RUNNING", maxResults=1)
+    if result.get("executions") or result.get("nextToken"):
+        raise ValueError("Refresh active or inventory incomplete; defer code promotion")
+    ecs = boto3.client("ecs", region_name=REGION)
+    result = ecs.list_tasks(cluster="airline-jobs", desiredStatus="RUNNING", maxResults=1)
+    if result.get("taskArns") or result.get("nextToken"):
+        raise ValueError("Task active or inventory incomplete; defer code promotion")
+
+
 def deliver(image_digest, apply, recover_partial=False):
+    require_idle()
     denials = direct_denials()
     if image_digest and not re.fullmatch(r"sha256:[a-f0-9]{64}", image_digest):
         raise ValueError("An exact immutable digest is required")
@@ -259,6 +272,7 @@ def deliver(image_digest, apply, recover_partial=False):
             "--verify",
         )
         if apply:
+            require_idle()
             run("terraform", "-chdir=" + str(root), "apply", "-input=false", "-no-color", str(plan))
             deployment = json.loads(
                 run(

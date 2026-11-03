@@ -67,6 +67,14 @@ resource "aws_iam_role_policy" "github_release" {
         Resource = [for kind in ["acquisition", "warehouse", "publisher"] : "arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-${kind}:*"]
       },
       {
+        Sid      = "ObserveTaskAdmission", Effect = "Allow", Action = "ecs:ListTasks"
+        Resource = "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs"
+      },
+      {
+        Sid      = "ObserveRefreshAdmission", Effect = "Allow", Action = "states:ListExecutions"
+        Resource = "arn:aws:states:us-east-2:336805808138:stateMachine:airline-isolated-refresh"
+      },
+      {
         # Definition validation does not execute a state or accept a resource ARN.
         Sid       = "ValidateWorkflow", Effect = "Allow", Action = "states:ValidateStateMachineDefinition", Resource = "*"
         Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-2" } }
