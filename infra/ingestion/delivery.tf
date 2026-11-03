@@ -1,8 +1,7 @@
 # Trusted code delivery only. The GitHub environment restricts deployments to main.
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = []
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
   lifecycle { prevent_destroy = true }
 }
 
@@ -17,7 +16,7 @@ resource "aws_iam_role" "github_release" {
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Condition = { StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:kirebanana/airline-delay-intelligence:environment:release"
+        "token.actions.githubusercontent.com:sub" = "repo:kirebanana@173084883/airline-delay-intelligence@1433493412:environment:release"
       } }
     }]
   })
@@ -31,8 +30,8 @@ resource "aws_iam_role_policy" "github_release" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "ApplicationStateList", Effect = "Allow", Action = "s3:ListBucket"
-        Resource  = "arn:aws:s3:::airline-state-336805808138-us-east-2"
+        Sid      = "ApplicationStateList", Effect = "Allow", Action = "s3:ListBucket"
+        Resource = "arn:aws:s3:::airline-state-336805808138-us-east-2"
         # Terraform lists workspace names; this permits no object reads there.
         Condition = { StringLike = { "s3:prefix" = ["aws/jobs.tfstate", "aws/jobs.tfstate.tflock", "env:/"] } }
       },

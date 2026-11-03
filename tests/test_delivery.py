@@ -15,6 +15,14 @@ SPEC.loader.exec_module(delivery)
 
 
 class DeliveryTests(unittest.TestCase):
+    def test_trust_uses_immutable_repository_subject(self):
+        policy = (ROOT / "infra/ingestion/delivery.tf").read_text()
+        self.assertIn(
+            "repo:kirebanana@173084883/airline-delay-intelligence@1433493412:environment:release",
+            policy,
+        )
+        self.assertNotIn('"repo:kirebanana/airline-delay-intelligence:environment:release"', policy)
+
     def test_only_authorization_errors_prove_denial(self):
         for code in ["AccessDenied", "AccessDeniedException", "InvalidIdentityToken"]:
             denied = Mock(side_effect=ClientError({"Error": {"Code": code}}, "Probe"))
