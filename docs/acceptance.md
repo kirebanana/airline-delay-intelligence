@@ -21,18 +21,21 @@ captures the 2026-11-03 evidence checkpoint, not a live inventory or final accep
 
 ## Known external prerequisites
 
-- GitHub currently reports the target repository as public, while the owner's latest
-  push authorization calls it private. Do not push, change visibility or substitute
-  a public-protection workaround without resolving this condition.
+- The owner confirmed intentional public visibility on 2026-11-03 and authorized
+  publication after a secrets/state/sensitive-evidence audit. This prerequisite is
+  resolved; actual protected delivery still requires qualification.
 - Current Snowflake workload roles cannot faithfully expose the provider metadata
   required for service-user/account attachment adoption. Do not remove
   `prevent_destroy`, suppress TYPE drift or add broad workload privileges to obtain
   a green plan. Use an explicitly approved infrastructure identity and reviewed
   import/no-change plan.
-- The approved temporary Terraform 1.13.4 executable disappeared during interruption.
-  Remaining promotion/overlap/rollback tests and fresh no-change plans require its
-  restoration. No tool installation, manual SDK task registration or source/plan
-  substitution has been used to bypass this workspace's tool-approval rule.
+- Terraform 1.13.4 has been restored with owner approval from HashiCorp's release
+  site. Its checksum manifest has a verified HashiCorp signature, the archive
+  checksum matches and the executable reports the pinned version. This prerequisite
+  is resolved; restoration itself does not authorize unrelated infrastructure.
+- The three HIGH image findings have been [investigated](image-security.md).
+  Stable Debian offers no newer candidate for the affected packages; preserve
+  findings and bind the assessment to the tested/scanned promoted digest.
 
 These are genuine publication/security and privileged-adoption prerequisites, not
 requests for routine implementation approval. Independent cloud, local testing and

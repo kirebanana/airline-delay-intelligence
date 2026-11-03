@@ -1,9 +1,10 @@
 # Code delivery and data execution
 
 **Status: local validation and operator promotion qualified; GitHub execution and
-protected OIDC deployment remain pending.** No push is permitted while the actual
-public repository conflicts with the owner's latest private-repository condition.
-Repository visibility must not be changed implicitly to make a test pass.
+protected OIDC deployment remain pending.** On 2026-11-03 the owner confirmed that
+the repository is intentionally public and authorized verified publication.
+Audit committed history and new artifacts for secrets, state and sensitive evidence
+before pushing; do not change repository visibility.
 
 ## Credential-free validation
 

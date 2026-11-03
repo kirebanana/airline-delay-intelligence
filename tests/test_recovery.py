@@ -37,6 +37,7 @@ class AttendedRecoveryTests(unittest.TestCase):
     def test_unknown_query_status_never_clears_matching_uncertainty(self):
         class Driver:
             description = [(name,) for name in ("id", "user", "session", "state")]
+
             @contextmanager
             def cursor(self):
                 yield self
