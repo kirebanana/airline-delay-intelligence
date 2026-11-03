@@ -1,11 +1,32 @@
 """Fail-closed review of immutable application-release plans, never authorization."""
 
+import hashlib
 import json
 import re
+
+from airline_warehouse.cloud_workflow import definition
 
 KINDS = ("acquisition", "warehouse", "publisher")
 ROLE = "arn:aws:iam::336805808138:role/"
 REPOSITORY = "336805808138.dkr.ecr.us-east-2.amazonaws.com/airline-delay-intelligence"
+# Ordinary release configuration is deliberately fixed. An intentional registrar
+# change requires reviewing and updating this binding, not accepting another graph.
+QUALIFIED_MAIN_SHA256 = "d4cc0f2d2f20e773ecef1e387446750c401c87adb7ebae556298507ec1abf167"
+
+
+def validate_saved_graph_source(saved_main, current_main):
+    """Bind unknown graphs to the entire qualified registrar, including comments."""
+    if saved_main != current_main:
+        raise ValueError("Saved plan was not produced by this reviewed release configuration")
+    if hashlib.sha256(saved_main).hexdigest() != QUALIFIED_MAIN_SHA256:
+        raise ValueError("Saved graph source differs from the qualified registrar")
+
+
+def validate_configuration_inventory(saved_files, current_files):
+    """An override/additional module must not replace an otherwise pinned argument."""
+    if set(saved_files) != {"main.tf"} or set(current_files) != {"main.tf"}:
+        raise ValueError("Unapproved Terraform configuration or override file")
+    validate_saved_graph_source(saved_files["main.tf"], current_files["main.tf"])
 
 
 def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
@@ -147,6 +168,45 @@ def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
                 raise ValueError(
                     "Workflow promotion cannot change platform, logging or role contracts"
                 )
+    workflow = next(r for r in changes if r["type"] == "aws_sfn_state_machine")
+    planned = workflow["change"]["after"].get("definition")
+    contract = plan.get("variables", {}).get("processing_contract", {}).get("value", "")
+    if not re.fullmatch(r"[a-f0-9]{64}", contract):
+        raise ValueError("Saved graph must bind an exact processing contract")
+    if planned is not None:
+        tasks = {
+            r["index"]: r["change"]["after"].get("arn")
+            for r in changes
+            if r["type"] == "aws_ecs_task_definition"
+        }
+        if any(not isinstance(v, str) for v in tasks.values()):
+            raise ValueError("Known saved graph must bind known exact task revisions")
+        if json.loads(planned) != definition(tasks, image_digest, contract):
+            raise ValueError("Saved workflow graph differs from qualified generator")
+    else:
+        config = plan.get("configuration", {}).get("root_module", {}).get("resources", [])
+        configs = [r for r in config if r.get("address") == "aws_sfn_state_machine.refresh"]
+        expected_refs = {
+            "path.module",
+            "var.image_digest",
+            "var.processing_contract",
+            "aws_ecs_task_definition.stage",
+        }
+        for kind in KINDS:
+            expected_refs |= {
+                f'aws_ecs_task_definition.stage["{kind}"]',
+                f'aws_ecs_task_definition.stage["{kind}"].arn',
+            }
+        expression = (
+            configs[0].get("expressions", {}).get("definition", {}) if len(configs) == 1 else {}
+        )
+        if (
+            len(configs) != 1
+            or set(expression) != {"references"}
+            or set(expression.get("references", [])) != expected_refs
+            or not workflow["change"].get("after_unknown", {}).get("definition")
+        ):
+            raise ValueError("Unknown saved graph has unexpected template/task/variable bindings")
     return {
         "task_revisions": revisions,
         "retained_deposed_state_retirements": len(deposed),
