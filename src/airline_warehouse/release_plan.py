@@ -1,5 +1,6 @@
 """Fail-closed review of immutable application-release plans, never authorization."""
 
+import hashlib
 import json
 import re
 
@@ -8,22 +9,17 @@ from airline_warehouse.cloud_workflow import definition
 KINDS = ("acquisition", "warehouse", "publisher")
 ROLE = "arn:aws:iam::336805808138:role/"
 REPOSITORY = "336805808138.dkr.ecr.us-east-2.amazonaws.com/airline-delay-intelligence"
+# Ordinary release configuration is deliberately fixed. An intentional registrar
+# change requires reviewing and updating this binding, not accepting another graph.
+QUALIFIED_MAIN_SHA256 = "d4cc0f2d2f20e773ecef1e387446750c401c87adb7ebae556298507ec1abf167"
 
 
 def validate_saved_graph_source(saved_main, current_main):
-    """Bind unknown planned graphs to the exact archived, checked expression."""
+    """Bind unknown graphs to the entire qualified registrar, including comments."""
     if saved_main != current_main:
         raise ValueError("Saved plan was not produced by this reviewed release configuration")
-    expression = re.search(r"\bdefinition\s*=\s*(.*?)\n\s*lifecycle", saved_main.decode(), re.S)
-    expected = """templatefile("${path.module}/refresh.asl.json.tftpl", {
-        task_acquisition = aws_ecs_task_definition.stage["acquisition"].arn
-        task_warehouse = aws_ecs_task_definition.stage["warehouse"].arn
-        task_publisher = aws_ecs_task_definition.stage["publisher"].arn
-        image_digest = var.image_digest
-        processing_contract = var.processing_contract
-    })"""
-    if expression is None or re.sub(r"\s+", "", expression[1]) != re.sub(r"\s+", "", expected):
-        raise ValueError("Saved graph expression must use only the exact checked template bindings")
+    if hashlib.sha256(saved_main).hexdigest() != QUALIFIED_MAIN_SHA256:
+        raise ValueError("Saved graph source differs from the qualified registrar")
 
 
 def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):

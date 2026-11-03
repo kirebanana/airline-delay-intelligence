@@ -1,7 +1,11 @@
 import copy
+import hashlib
 import json
 import unittest
+from unittest.mock import patch
 
+import airline_warehouse.release_plan as release_plan
+from airline_warehouse.cloud_workflow import definition
 from airline_warehouse.release_plan import (
     KINDS,
     REPOSITORY,
@@ -9,7 +13,6 @@ from airline_warehouse.release_plan import (
     inspect_release_plan,
     validate_saved_graph_source,
 )
-from airline_warehouse.cloud_workflow import definition
 
 
 class ReleasePlanTests(unittest.TestCase):
@@ -22,12 +25,18 @@ class ReleasePlanTests(unittest.TestCase):
             processing_contract = var.processing_contract
         })
         lifecycle { prevent_destroy = true }"""
-        validate_saved_graph_source(source, source)
-        with self.assertRaisesRegex(ValueError, "configuration"):
-            validate_saved_graph_source(source, source + b"# changed")
-        bypass = source.replace(b"templatefile(", b"evil(")
-        with self.assertRaisesRegex(ValueError, "graph"):
-            validate_saved_graph_source(bypass, bypass)
+        with patch.object(
+            release_plan, "QUALIFIED_MAIN_SHA256", hashlib.sha256(source).hexdigest()
+        ):
+            validate_saved_graph_source(source, source)
+            with self.assertRaisesRegex(ValueError, "configuration"):
+                validate_saved_graph_source(source, source + b"# changed")
+            bypass = source.replace(b"templatefile(", b"evil(")
+            with self.assertRaisesRegex(ValueError, "graph"):
+                validate_saved_graph_source(bypass, bypass)
+            commented_decoy = b"/* " + source + b" */\ndefinition = evil()"
+            with self.assertRaisesRegex(ValueError, "graph"):
+                validate_saved_graph_source(commented_decoy, commented_decoy)
 
     def plan(self):
         changes = []
@@ -90,7 +99,8 @@ class ReleasePlanTests(unittest.TestCase):
                         "definition": json.dumps(
                             definition(
                                 {
-                                    k: f"arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-{k}:2"
+                                    k: "arn:aws:ecs:us-east-2:336805808138:task-definition/"
+                                    + f"airline-stage-{k}:2"
                                     for k in KINDS
                                 },
                                 "sha256:" + "b" * 64,
