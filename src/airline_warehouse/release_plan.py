@@ -3,9 +3,27 @@
 import json
 import re
 
+from airline_warehouse.cloud_workflow import definition
+
 KINDS = ("acquisition", "warehouse", "publisher")
 ROLE = "arn:aws:iam::336805808138:role/"
 REPOSITORY = "336805808138.dkr.ecr.us-east-2.amazonaws.com/airline-delay-intelligence"
+
+
+def validate_saved_graph_source(saved_main, current_main):
+    """Bind unknown planned graphs to the exact archived, checked expression."""
+    if saved_main != current_main:
+        raise ValueError("Saved plan was not produced by this reviewed release configuration")
+    expression = re.search(r"\bdefinition\s*=\s*(.*?)\n\s*lifecycle", saved_main.decode(), re.S)
+    expected = """templatefile("${path.module}/refresh.asl.json.tftpl", {
+        task_acquisition = aws_ecs_task_definition.stage["acquisition"].arn
+        task_warehouse = aws_ecs_task_definition.stage["warehouse"].arn
+        task_publisher = aws_ecs_task_definition.stage["publisher"].arn
+        image_digest = var.image_digest
+        processing_contract = var.processing_contract
+    })"""
+    if expression is None or re.sub(r"\s+", "", expression[1]) != re.sub(r"\s+", "", expected):
+        raise ValueError("Saved graph expression must use only the exact checked template bindings")
 
 
 def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
@@ -147,6 +165,45 @@ def inspect_release_plan(plan, image_digest, *, allow_retained_deposed=False):
                 raise ValueError(
                     "Workflow promotion cannot change platform, logging or role contracts"
                 )
+    workflow = next(r for r in changes if r["type"] == "aws_sfn_state_machine")
+    planned = workflow["change"]["after"].get("definition")
+    contract = plan.get("variables", {}).get("processing_contract", {}).get("value", "")
+    if not re.fullmatch(r"[a-f0-9]{64}", contract):
+        raise ValueError("Saved graph must bind an exact processing contract")
+    if planned is not None:
+        tasks = {
+            r["index"]: r["change"]["after"].get("arn")
+            for r in changes
+            if r["type"] == "aws_ecs_task_definition"
+        }
+        if any(not isinstance(v, str) for v in tasks.values()):
+            raise ValueError("Known saved graph must bind known exact task revisions")
+        if json.loads(planned) != definition(tasks, image_digest, contract):
+            raise ValueError("Saved workflow graph differs from qualified generator")
+    else:
+        config = plan.get("configuration", {}).get("root_module", {}).get("resources", [])
+        configs = [r for r in config if r.get("address") == "aws_sfn_state_machine.refresh"]
+        expected_refs = {
+            "path.module",
+            "var.image_digest",
+            "var.processing_contract",
+            "aws_ecs_task_definition.stage",
+        }
+        for kind in KINDS:
+            expected_refs |= {
+                f'aws_ecs_task_definition.stage["{kind}"]',
+                f'aws_ecs_task_definition.stage["{kind}"].arn',
+            }
+        expression = (
+            configs[0].get("expressions", {}).get("definition", {}) if len(configs) == 1 else {}
+        )
+        if (
+            len(configs) != 1
+            or set(expression) != {"references"}
+            or set(expression.get("references", [])) != expected_refs
+            or not workflow["change"].get("after_unknown", {}).get("definition")
+        ):
+            raise ValueError("Unknown saved graph has unexpected template/task/variable bindings")
     return {
         "task_revisions": revisions,
         "retained_deposed_state_retirements": len(deposed),

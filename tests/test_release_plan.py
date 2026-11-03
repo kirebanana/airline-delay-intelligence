@@ -2,14 +2,38 @@ import copy
 import json
 import unittest
 
-from airline_warehouse.release_plan import KINDS, REPOSITORY, ROLE, inspect_release_plan
+from airline_warehouse.release_plan import (
+    KINDS,
+    REPOSITORY,
+    ROLE,
+    inspect_release_plan,
+    validate_saved_graph_source,
+)
+from airline_warehouse.cloud_workflow import definition
 
 
 class ReleasePlanTests(unittest.TestCase):
+    def test_saved_source_rejects_graph_bypass_and_archive_source_mismatch(self):
+        source = b"""definition = templatefile("${path.module}/refresh.asl.json.tftpl", {
+            task_acquisition = aws_ecs_task_definition.stage["acquisition"].arn
+            task_warehouse = aws_ecs_task_definition.stage["warehouse"].arn
+            task_publisher = aws_ecs_task_definition.stage["publisher"].arn
+            image_digest = var.image_digest
+            processing_contract = var.processing_contract
+        })
+        lifecycle { prevent_destroy = true }"""
+        validate_saved_graph_source(source, source)
+        with self.assertRaisesRegex(ValueError, "configuration"):
+            validate_saved_graph_source(source, source + b"# changed")
+        bypass = source.replace(b"templatefile(", b"evil(")
+        with self.assertRaisesRegex(ValueError, "graph"):
+            validate_saved_graph_source(bypass, bypass)
+
     def plan(self):
         changes = []
         for kind in KINDS:
             task = {
+                "arn": f"arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-{kind}:1",
                 "family": "airline-stage-" + kind,
                 "cpu": "256",
                 "memory": "1024",
@@ -34,6 +58,7 @@ class ReleasePlanTests(unittest.TestCase):
                 ),
             }
             after = copy.deepcopy(task)
+            after["arn"] = after["arn"][:-1] + "2"
             after["container_definitions"] = after["container_definitions"].replace(
                 "a" * 64, "b" * 64
             )
@@ -60,11 +85,34 @@ class ReleasePlanTests(unittest.TestCase):
                 "change": {
                     "actions": ["update"],
                     "before": workflow,
-                    "after": {**workflow, "definition": None},
+                    "after": {
+                        **workflow,
+                        "definition": json.dumps(
+                            definition(
+                                {
+                                    k: f"arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-{k}:2"
+                                    for k in KINDS
+                                },
+                                "sha256:" + "b" * 64,
+                                "c" * 64,
+                            )
+                        ),
+                    },
                 },
             }
         )
-        return {"resource_changes": changes}
+        return {
+            "resource_changes": changes,
+            "variables": {"processing_contract": {"value": "c" * 64}},
+        }
+
+    def test_arbitrary_saved_workflow_cannot_bypass_template(self):
+        plan = self.plan()
+        plan["resource_changes"][-1]["change"]["after"]["definition"] = json.dumps(
+            {"StartAt": "Bypass", "States": {"Bypass": {"Type": "Succeed"}}}
+        )
+        with self.assertRaisesRegex(ValueError, "graph"):
+            inspect_release_plan(plan, "sha256:" + "b" * 64)
 
     def test_exact_retained_revision_promotion_is_review_not_authorization(self):
         result = inspect_release_plan(self.plan(), "sha256:" + "b" * 64)

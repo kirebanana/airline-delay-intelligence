@@ -9,12 +9,13 @@ import argparse
 import hashlib
 import json
 import subprocess
+import zipfile
 from pathlib import Path
 
 import airline_warehouse.cloud_workflow as graph_module
 import airline_warehouse.release_plan as guard_module
 from airline_warehouse.cloud_workflow import definition
-from airline_warehouse.release_plan import KINDS, inspect_release_plan
+from airline_warehouse.release_plan import KINDS, inspect_release_plan, validate_saved_graph_source
 
 
 def digest(path):
@@ -55,6 +56,16 @@ def main():
             [args.terraform, "show", "-json", str(args.plan.resolve())], cwd=root
         )
     )
+    if (
+        plan.get("variables", {}).get("processing_contract", {}).get("value")
+        != image["processing_contract"]
+    ):
+        raise ValueError("Saved plan contract differs from the exact image measurement")
+    # Terraform's JSON omits the full expression syntax when new task ARNs make
+    # the definition unknown. Bind the actual archived HCL, not just references.
+    with zipfile.ZipFile(args.plan) as archive:
+        saved_main = archive.read("tfconfig/m-/main.tf")
+    validate_saved_graph_source(saved_main, (root / "main.tf").read_bytes())
     review = inspect_release_plan(
         plan, image["image_digest"], allow_retained_deposed=args.recover_retained_deposed
     )
