@@ -15,6 +15,11 @@ SPEC.loader.exec_module(delivery)
 
 
 class DeliveryTests(unittest.TestCase):
+    def test_provider_refresh_has_required_read_permissions(self):
+        policy = (ROOT / "infra/ingestion/delivery.tf").read_text()
+        self.assertIn('Action = "ecs:DescribeTaskDefinition", Resource = "*"', policy)
+        self.assertIn('"states:ListStateMachineVersions"', policy)
+
     def test_trust_uses_immutable_repository_subject(self):
         policy = (ROOT / "infra/ingestion/delivery.tf").read_text()
         self.assertIn(

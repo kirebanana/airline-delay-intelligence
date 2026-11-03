@@ -58,12 +58,17 @@ resource "aws_iam_role_policy" "github_release" {
         Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-2" } }
       },
       {
-        Sid      = "ReadRetainedTasks", Effect = "Allow", Action = ["ecs:DescribeTaskDefinition", "ecs:ListTagsForResource", "ecs:TagResource"]
+        # AWS does not support resource-level authorization for this read API.
+        Sid       = "DescribeTaskDefinitions", Effect = "Allow", Action = "ecs:DescribeTaskDefinition", Resource = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-2" } }
+      },
+      {
+        Sid      = "ReadRetainedTasks", Effect = "Allow", Action = ["ecs:ListTagsForResource", "ecs:TagResource"]
         Resource = [for kind in ["acquisition", "warehouse", "publisher"] : "arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-${kind}:*"]
       },
       {
         Sid      = "WorkflowRevision", Effect = "Allow"
-        Action   = ["states:DescribeStateMachine", "states:ListTagsForResource", "states:UpdateStateMachine", "states:PublishStateMachineVersion"]
+        Action   = ["states:DescribeStateMachine", "states:ListStateMachineVersions", "states:ListTagsForResource", "states:UpdateStateMachine", "states:PublishStateMachineVersion"]
         Resource = "arn:aws:states:us-east-2:336805808138:stateMachine:airline-isolated-refresh"
       },
       {
