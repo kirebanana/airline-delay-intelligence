@@ -67,8 +67,9 @@ resource "aws_iam_role_policy" "github_release" {
         Resource = [for kind in ["acquisition", "warehouse", "publisher"] : "arn:aws:ecs:us-east-2:336805808138:task-definition/airline-stage-${kind}:*"]
       },
       {
-        Sid      = "ObserveTaskAdmission", Effect = "Allow", Action = "ecs:ListTasks"
-        Resource = "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs"
+        Sid       = "ObserveTaskAdmission", Effect = "Allow", Action = "ecs:ListTasks"
+        Resource  = "arn:aws:ecs:us-east-2:336805808138:container-instance/airline-jobs/*"
+        Condition = { ArnEquals = { "ecs:cluster" = "arn:aws:ecs:us-east-2:336805808138:cluster/airline-jobs" } }
       },
       {
         Sid      = "ObserveRefreshAdmission", Effect = "Allow", Action = "states:ListExecutions"
