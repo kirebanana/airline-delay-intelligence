@@ -1,9 +1,12 @@
 # Finite cloud jobs: qualification status
 
-**Status: partial implementation and live tracer qualified, 2026-11-03.**
+**Status: complete positive-cloud path and replay qualified; final delivery/recovery
+acceptance in progress, 2026-11-03.**
 This is implementation evidence, not final acceptance of tickets 16–20 or a new
 authorization to run data work. See the [approved specification](specifications/airline-delay-intelligence.md)
 and [platform adoption history](terraform-adoption.md).
+The [sanitized summary](evidence/qualification-summary.json) preserves the dated
+qualification results without raw operational logs, state or credentials.
 
 ## Implemented boundary
 
@@ -107,18 +110,91 @@ It introduced selection references, the replay branch and bounded read retries,
 not new IAM/network/secret resources or data starts on deployment.
 
 The explicit isolated execution
-`complete-baseline-9cef537a113f49edbe555fcff1f498dd` selects all 36 accepted months
-and fixed DEN weather. Its terminal result and independent reconciliation are
-still pending at this documentation checkpoint; deployment is not live acceptance.
+`complete-baseline-9cef537a113f49edbe555fcff1f498dd` **succeeded** with all 36 accepted
+months and fixed DEN weather. All four tasks stopped with exit zero; 810 queries
+were independently verified terminal through their originating session histories.
+All 1,634 durable journal events were retained. Independent original-source checks
+passed counts, signed quantiles, categories, cancellation reasons, recovery measures,
+group populations and fixed-pilot coverage for the actual frozen cloud release.
+Release `9cef537a113f49edbe555fcff1f498dd` contains 22,562,477 rows. The original
+production descriptor remained unchanged. Observed cloud workload was 480.658713381
+seconds, merged into the original cumulative ledger with verification time.
 
-Post-oracle plans for both AWS roots were clean. Independent AWS reads found no
-running tasks, ECS services or refresh executions. Latest Snowflake metadata showed
+Maximum workflow state was 6,840 bytes and ECS overrides 1,990 bytes. The selection
+and larger candidate/release payload references therefore qualify the complete
+input map without exceeding the project control or service override limits.
+
+Exact replay `exact-replay-27028fd7e3264b5ca7b3125cba3ff62a` also **succeeded**.
+It ran only publisher admission, returned the byte-equivalent committed descriptor
+and did not launch acquisition, warehouse/dbt or a new publisher snapshot. Its one
+task stopped; all 28 journalled queries were terminal. The replay added 19.546289913
+workload seconds, not a reset ledger or new complete build.
+
+The deliberately wrong selection checksum in
+`bad-manifest-1410aa9ad5994d41beecb1c8750d36fe` failed to `RECOVERY_REQUIRED` with
+one task exiting 1 and no SQL session/submission. Supported exact name/input launch
+replay returned the same execution ARN, not another launch. Attended reconciliation
+confirmed no publication and cleared only that matching ledger uncertainty before
+the next isolated test.
+
+The subsequent isolated external-abort case
+`external-abort-6688a2e34b2c4e80b1449cd2e5715bd5` was stopped during warehouse work.
+All three started tasks were independently observed STOPPED; the warehouse exited
+137. New budget admission was refused and a new target claim returned Busy while
+the uncertainty remained. Both production and the prior complete test release were
+unchanged. Attended recovery used the three originating publisher/builder sessions,
+verified their known queries terminal and retired only the matching failed claim.
+There were 1,204 durable journal events. This qualifies the actual external-abort
+path, not a claim that STOPPED alone proves SQL or transaction termination.
+
+The post-commit case `post-commit-6a0899b10b4047e285f2df7ebb3928ea` intentionally
+pre-created only its new request's result-report key. The publisher committed a
+35-month/weather test release, then failed its create-only status write. The
+workflow failed and its publisher exited 1, but originating-session recovery
+reconciled **PUBLISHED**, not rollback. All four tasks were STOPPED; seven
+originating sessions and 1,602 journal events were preserved. Production was not
+changed. The earlier complete 36-month cloud release remains retained and readable.
+
+A separate fixed-entrypoint client-death task exited 31 with an uncommitted
+test-target guard write and a fixed asynchronous read. Exact query history proves
+the SQL continued **95.452 seconds after ECS STOPPED**, then hit the 120-second
+server timeout. Session abort alone still left its explicit transaction running.
+Recovery was corrected to discover only the originating user's exact session
+transactions, abort those IDs and positively verify none remain. Actual guard
+rollback and both unchanged descriptors were proven before matching authority was
+retired. This uses existing originating-user privileges, not an admin fallback.
+See [the recovery runbook](cloud-recovery.md).
+
+After that recovery, `after-recovery-confirmed-fcc4884bc9234ee6b0a79a8ad8da342c`
+succeeded with one admission task, 28 terminal queries and reuse of the exact
+committed 35-month test descriptor. A further real fencing check refused stale
+retirement, proved old published-run recovery did not clear a newer owner, retired
+the new control-only claim and verified the 22,562,477-row population with a
+server-side aggregate through the prior complete cloud release's pinned descriptor.
+
+The restricted-reader production dashboard passed all six views, DEN filtering and
+reset after the native light-theme update. Cold render was 29.37 seconds and warm
+6.66 seconds with Snowflake result reuse disabled; no warehouse resize was used.
+The final cross-case audit found zero matching open transactions across 24 known
+originating sessions and no active test-target claim. Production remains the
+original 36-month release.
+
+At the first-tracer post-oracle checkpoint, plans for both AWS roots were clean.
+Independent AWS reads found no
+running tasks, ECS services or refresh executions. That Snowflake metadata showed
 zero running/queued statements, monitor quota 10.00, used 4.92 and remaining 5.08
 credits. These remain account-wide observations, not final billing.
 
-Still outstanding: complete module/weather cloud coverage, bounded transient
-handling and launch/replay qualification; GitHub-executed CI and protected OIDC
-promotion/rollback; real cloud abort/orphan/post-commit recovery tests; deferred
-Snowflake infrastructure identity/adoption and remote state; final acceptance and
-presentation packaging. The credential-free validation workflow contains no cloud
+Still outstanding: remaining transient/retained-version delivery qualification;
+GitHub-executed CI and protected OIDC promotion/rollback; deferred Snowflake
+infrastructure identity/adoption; final acceptance and owner presentation review.
+The final 121-test image (31 live skips) includes the recovery fix and is pushed/
+digest-verified/scanned, but is **not yet promoted**. Its Basic scan still has the
+same known 3 HIGH / 9 MEDIUM / 3 LOW findings. The previously installed temporary
+Terraform binary disappeared during interruption; no tool was reinstalled and no
+unreviewed SDK registration was substituted for Terraform. Remaining promotion/
+overlap/rollback tests need that approved tool restored. Snowflake static
+state has now migrated separately to the protected backend without object mutation.
+The presentation and non-destructive cleanup proposal are prepared. The
+credential-free validation workflow contains no cloud
 authentication, image push, deployment or data-start step.

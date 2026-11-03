@@ -2,7 +2,7 @@
 
 A data engineering project that transforms historical U.S. airline records into a
 Snowflake warehouse and an interactive reliability dashboard. Built with **Python,
-Amazon S3, Snowflake, dbt Core, Streamlit, and Terraform**.
+Amazon S3, Snowflake, dbt Core, Streamlit, Terraform, ECS/Fargate and Step Functions**.
 
 The January 2023–December 2025 baseline contains **22,562,477 reported scheduled
 operation rows**, with a fixed **24,732-row Denver/January 2025 weather pilot**.
@@ -10,10 +10,14 @@ The focus is both useful analysis and a
 reproducible pipeline: preserving source data, handling corrections without double
 counting, and keeping incomplete refreshes out of the dashboard.
 
-**Current milestone (2026-11-01):** The complete 2023–2025 baseline is published
+**Current milestone (2026-11-03):** The complete 2023–2025 baseline is published
 with all six analytical areas and the DEN weather pilot. Independent source-to-reader
 reconciliation, failure preservation, replay and real-dashboard qualification pass.
-Cloud-platform acceptance remains separate. See the [baseline evidence](docs/baseline.md),
+A separate isolated full-module cloud refresh has also succeeded and independently
+reconciled all 36 months and weather; exact-input cloud replay reused that same
+release without rebuilding. Final CI/security/recovery acceptance remains separate.
+See the [acceptance map](docs/acceptance.md), [sanitized qualification summary](docs/evidence/qualification-summary.json), [cloud evidence](docs/cloud-jobs.md),
+[presentation guide](docs/presentation.md), [baseline evidence](docs/baseline.md),
 [category/recovery notes](docs/secondary-analytics.md),
 [weather runbook](docs/weather.md) and [attended local recovery](docs/local-recovery.md).
 
@@ -98,5 +102,6 @@ uv run --extra analytics ruff check .
 | [`src/airline_warehouse/`](src/airline_warehouse/) | Preparation, loading, refresh, publication, analytical SQL, and dashboard |
 | [`dbt/`](dbt/) | Warehouse models, data tests, and transformation lineage |
 | [`infra/ingestion/`](infra/ingestion/) | Terraform for private S3 storage and scoped IAM access |
+| [`infra/jobs/`](infra/jobs/) | Separate immutable task/workflow release state and promotion review |
 | [`sql/`](sql/) | Snowflake setup and publication-control schema |
 | [`tests/`](tests/) | Offline and explicitly enabled integration tests |

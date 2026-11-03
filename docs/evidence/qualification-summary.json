@@ -1,0 +1,160 @@
+{
+  "status": "Partial final acceptance: data/cloud recovery qualified; external prerequisites remain",
+  "date": "2026-11-03",
+  "operator_code_revision": "777ff1edd99df0e2dd0e3293dbb217c979e83891",
+  "production": {
+    "release_id": "02d263d7f7174890b6da97c15a81d098",
+    "months": 36,
+    "scheduled_rows": 22562477,
+    "unchanged": true
+  },
+  "cloud_complete_release": {
+    "release_id": "9cef537a113f49edbe555fcff1f498dd",
+    "months": 36,
+    "scheduled_rows": 22562477,
+    "workflow_version": 3,
+    "image_digest": "sha256:e6356147a0ad28b3dd64d192664967224dda9b77491ccd1e757da73d7c373c6b",
+    "source_reconciliation": "PASS",
+    "tasks_stopped": 4,
+    "queries_terminal": 810,
+    "durable_journal_events": 1634,
+    "maximum_state_bytes": 6840,
+    "maximum_ecs_override_bytes": 1990
+  },
+  "weather": {
+    "scope": "DEN, full local January 2025 scheduled population",
+    "per_variable": {
+      "temperature": {
+        "scheduled_rows": 24732,
+        "matched_rows": 24585,
+        "coverage_percent": 99.4056
+      },
+      "wind": {
+        "scheduled_rows": 24732,
+        "matched_rows": 24683,
+        "coverage_percent": 99.8019
+      },
+      "visibility": {
+        "scheduled_rows": 24732,
+        "matched_rows": 24380,
+        "coverage_percent": 98.5767
+      }
+    },
+    "maximum_backward_age_seconds": 3600,
+    "frozen_quality_validation": "PASS"
+  },
+  "exact_replay": {
+    "same_descriptor": true,
+    "admission_tasks_only": 1,
+    "queries_terminal": 28,
+    "no_rebuild": true
+  },
+  "failure_recovery": {
+    "bad_manifest": "FAILED before SQL; matching intent reconciled",
+    "external_abort": {
+      "execution": "ABORTED",
+      "publication": "NOT_PUBLISHED",
+      "cleanup": "COMPLETE",
+      "originating_sessions": 3
+    },
+    "post_commit": {
+      "execution": "FAILED",
+      "publication": "PUBLISHED",
+      "committed_test_months": 35,
+      "production_unchanged": true
+    },
+    "detached_transaction": {
+      "task_exit_code": 31,
+      "sql_outlived_stopped_task_seconds": 95.452,
+      "sql_elapsed_seconds": 120.08,
+      "server_statement_timeout_seconds": 120,
+      "explicit_transaction_abort_required": true,
+      "guard_write_rolled_back": true,
+      "remaining_transactions": 0
+    },
+    "next_admission": {
+      "status": "SUCCEEDED",
+      "same_committed_descriptor": true,
+      "admission_tasks_only": 1
+    },
+    "stale_fencing_and_prior_pin": {
+      "stale_retirement_refused": true,
+      "old_published_recovery_preserved_new_owner": true,
+      "fresh_control_only_claim_retired": true,
+      "active_test_release_unchanged": true,
+      "production_unchanged": true,
+      "prior_complete_cloud_release_readable": "9cef537a113f49edbe555fcff1f498dd",
+      "prior_pinned_rows": 22562477
+    }
+  },
+  "dashboard": {
+    "real_restricted_reader": true,
+    "all_six_views": true,
+    "den_filter_and_reset": true,
+    "timings_seconds": {
+      "initial_cold_seconds": 29.365457302999857,
+      "initial_warm_seconds": 6.659275158001037,
+      "carrier_seconds": 8.238995876001354,
+      "month_seconds": 8.785599486998763,
+      "weekday_seconds": 7.6626238970002305,
+      "hour_seconds": 5.473570645001018,
+      "airport_seconds": 6.60587890899842,
+      "route_seconds": 10.340762595998967,
+      "den_filter_seconds": 19.28383384600056
+    },
+    "warehouse_resized": false
+  },
+  "current_scope": {
+    "known_originating_sessions": 24,
+    "matching_open_transactions": 0,
+    "test_claim_retired": true,
+    "running_aws_tasks": 0,
+    "ecs_services": 0,
+    "running_refreshes": 0,
+    "inbound_rules": 0,
+    "operator_self_protection_preserved": true
+  },
+  "static_state": {
+    "remote_roots": 3,
+    "snowflake_instances_preserved": 12,
+    "snowflake_resources_and_outputs_preserved": true,
+    "new_remote_lineage_recorded": true,
+    "snowflake_object_mutations": false
+  },
+  "offline_tests": {
+    "discovered": 121,
+    "passed": 90,
+    "live_skipped": 31,
+    "container_network": "none",
+    "container_root_filesystem": "read-only"
+  },
+  "final_image_candidate": {
+    "digest": "sha256:81de082b00373c1c8258cb367648be7b78a1b53914185530a19821e577d7a3ef",
+    "scan_status": "COMPLETE",
+    "scan_findings": {
+      "HIGH": 3,
+      "MEDIUM": 9,
+      "LOW": 3
+    },
+    "promoted": false,
+    "clean_scan_claim": false
+  },
+  "delivery": {
+    "workflow_effects_locally_checked": true,
+    "github_run_completed": false,
+    "oidc_promotion_deployed": false,
+    "github_push_performed": false
+  },
+  "remaining_gates": [
+    "Resolve actual-public versus latest-private GitHub publication condition",
+    "Restore previously approved pinned Terraform tool for remaining promotion/overlap/rollback and fresh plans",
+    "Provide an approved Snowflake infrastructure identity for deferred service-user/account-monitor attachment adoption",
+    "Complete actual protected GitHub CI/OIDC delivery and remaining transient/delivery qualification; owner final walkthrough"
+  ],
+  "cleanup": {
+    "plan_prepared": true,
+    "infrastructure_or_data_deletion_authorized": false,
+    "infrastructure_or_data_deleted_under_plan": false
+  },
+  "cost_caveat": "Cumulative accounting and recovery reserve preserved; credits and estimates are not a hard cash cap. Detailed operational and financial evidence remains outside Git."
+}

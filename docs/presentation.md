@@ -5,6 +5,9 @@ No cleanup, credential retirement or infrastructure deletion is authorized by th
 document. The working application requires Snowflake; preserved evidence is not an
 offline replacement warehouse or dashboard.
 
+Use the [sanitized qualification summary](evidence/qualification-summary.json) for
+the dated measured results and remaining gates. It is a checkpoint, not live status.
+
 ## The story in ten minutes
 
 1. **Question and scope (one minute).** Explain historical airline reliability,
