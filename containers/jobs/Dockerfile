@@ -13,6 +13,7 @@ COPY references /app/references
 COPY .streamlit /app/.streamlit
 COPY infra/jobs/refresh.asl.json.tftpl /app/infra/jobs/refresh.asl.json.tftpl
 COPY infra/jobs/deliver.py /app/infra/jobs/deliver.py
+COPY infra/ingestion/delivery.tf /app/infra/ingestion/delivery.tf
 COPY .github/workflows /app/.github/workflows
 COPY uv.lock /app/uv.lock
 COPY tests /app/tests

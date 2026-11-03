@@ -17,7 +17,7 @@ resource "aws_iam_role" "github_release" {
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Condition = { StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:kirebanana/airline-delay-intelligence:environment:release"
+        "token.actions.githubusercontent.com:sub" = "repo:kirebanana@173084883/airline-delay-intelligence@1433493412:environment:release"
       } }
     }]
   })
