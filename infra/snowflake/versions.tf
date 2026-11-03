@@ -6,8 +6,14 @@ terraform {
       version = "2.21.0"
     }
   }
-  # Import planning starts locally. No authoritative state/import apply or remote
-  # backend migration until the exact saved plan is reviewed.
+  backend "s3" {
+    bucket              = "airline-state-336805808138-us-east-2"
+    key                 = "snowflake/static.tfstate"
+    region              = "us-east-2"
+    allowed_account_ids = ["336805808138"]
+    encrypt             = true
+    use_lockfile        = true
+  }
 }
 
 variable "builder_private_key" {

@@ -13,6 +13,53 @@ from airline_warehouse.execution import producer_lock
 TERMINAL = {"SUCCESS", "FAILED_WITH_ERROR", "FAILED_WITH_INCIDENT", "ABORTED"}
 
 
+def terminate_own_session(connection, session_id, identity, deadline):
+    """Caller first proves producers terminal; session ACK alone is insufficient.
+
+    Snowflake can retain an explicit transaction after session abort. Discover
+    only this originating user's exact session transactions, abort those IDs and
+    positively verify that none remain before permitting authority retirement.
+    """
+    users = {"builder": "AIRLINE_DEV", "publisher": "AIRLINE_PUBLISHER"}
+    if identity not in users:
+        raise ValueError("Only the originating workload identity may recover a session")
+    bounded = DeadlineConnection(connection, 300, deadline=deadline)
+    with bounded.cursor() as cur:
+        cur.execute("SELECT SYSTEM$ABORT_SESSION(%s)", (int(session_id),))
+        acknowledgment = cur.fetchone()[0]
+        if "terminated" not in str(acknowledgment).lower():
+            raise ValueError("Exact session termination not acknowledged")
+
+    def transactions():
+        with bounded.cursor() as cur:
+            cur.execute("SHOW TRANSACTIONS")
+            names = [x[0].lower() for x in cur.description]
+            rows = [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
+        matching = [r for r in rows if int(r["session"]) == int(session_id)]
+        if any(str(r["user"]).upper() != users[identity] for r in matching):
+            raise ValueError("Transaction identity differs from the originating user")
+        return matching
+
+    aborted = []
+    for transaction in transactions():
+        transaction_id = int(transaction["id"])
+        with bounded.cursor() as cur:
+            cur.execute("SELECT SYSTEM$ABORT_TRANSACTION(%s)", (transaction_id,))
+            response = str(cur.fetchone()[0])
+        if "abort" not in response.lower() or str(transaction_id) not in response:
+            raise ValueError("Exact transaction abort not acknowledged")
+        aborted.append(transaction_id)
+    while transactions():
+        if time.monotonic() + 1 >= deadline:
+            raise TimeoutError("Originating transaction termination is not proven")
+        time.sleep(0.2)
+    return {
+        "termination": acknowledgment,
+        "aborted_transactions": aborted,
+        "transactions_terminal": True,
+    }
+
+
 def recover_local(output, budget_path):
     """Prove local exclusion, stop exact own sessions, reconcile, then retire matching work.
 
@@ -45,13 +92,7 @@ def recover_local(output, budget_path):
             proofs = []
             for sid, identity in sessions.items():
                 with connect_as(identity, deadline=deadline) as conn:
-                    bounded = DeadlineConnection(conn, 300, deadline=deadline)
-                    with bounded.cursor() as cur:
-                        # Own-session abort closes even a lost query-ID/BEGIN interval.
-                        cur.execute("SELECT SYSTEM$ABORT_SESSION(%s)", (int(sid),))
-                        acknowledgment = cur.fetchone()[0]
-                        if "terminated" not in str(acknowledgment).lower():
-                            raise ValueError("Exact session termination not acknowledged")
+                    termination = terminate_own_session(conn, sid, identity, deadline)
                     query_ids = {
                         e["query_id"]
                         for e in events
@@ -73,7 +114,7 @@ def recover_local(output, budget_path):
                         {
                             "session_id": sid,
                             "identity": identity,
-                            "termination": acknowledgment,
+                            **termination,
                             "terminal_queries": sorted(query_ids),
                         }
                     )

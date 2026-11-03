@@ -36,6 +36,7 @@ class AttendedRecoveryTests(unittest.TestCase):
 
     def test_unknown_query_status_never_clears_matching_uncertainty(self):
         class Driver:
+            description = [(name,) for name in ("id", "user", "session", "state")]
             @contextmanager
             def cursor(self):
                 yield self
@@ -45,6 +46,9 @@ class AttendedRecoveryTests(unittest.TestCase):
 
             def fetchone(self):
                 return ("session [123] terminated.",)
+
+            def fetchall(self):
+                return []
 
             def get_query_status(self, query_id):
                 from types import SimpleNamespace

@@ -55,9 +55,12 @@ airline recover-local --output /private/exact-attempt \
 
 The command refuses while any registered local producer holds the attempt lock.
 It takes the original ledger lock, checks matching work identity, and uses each
-originating service user to terminate **only its recorded sessions**. This also
-closes a lost query-ID/transaction-submission interval. It verifies all retained
-query IDs have explicit terminal states; unknown, disconnected, unavailable or
+originating service user to terminate **only its recorded sessions**. A session
+termination acknowledgment is not transaction proof: recovery inspects that user's
+transactions for the exact recorded session, aborts only those transaction IDs and
+positively verifies none remain. This covers a lost query-ID/transaction-submission
+interval without assuming session abort implicitly rolled it back. It also verifies
+all retained query IDs have explicit terminal states; unknown, disconnected, unavailable or
 unsupported evidence leaves authority/admission blocked. No administrator fallback
 or warehouse-wide abort is used.
 
@@ -89,6 +92,14 @@ two-second statement timeout observed with a longer client allowance. A managed
 dbt fixture build also passes with child handshake and shared query journaling.
 Review fixes recalculate limits after configuration and carry the fresh limits
 with each SQL statement, rather than reusing time already spent configuring it.
+
+The 2026-11-03 cloud client-death qualification exposed why the explicit transaction
+step is necessary. Its fixed query continued after ECS STOPPED and was canceled by
+the measured 120-second server timeout; an uncommitted test-target guard transaction
+still appeared running after session termination. Scoped originating-user transaction
+abort proved rollback, preserved both releases and allowed matching authority
+retirement. Regression tests now reject foreign-user transaction scope and verify
+that only the recorded session's transaction is aborted.
 
 The earlier diagnostic claim without this journal is **not automatically adopted
 or cleared**. Legacy standalone loading remains single-writer/attended; managed
