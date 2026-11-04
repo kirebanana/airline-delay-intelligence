@@ -12,7 +12,7 @@ or owner-acceptance statement.
 
 | Outcome | Existing evidence | Remaining final gate |
 | --- | --- | --- |
-| AC-01: managed infrastructure | [Adoption](terraform-adoption.md): protected separate AWS/Snowflake static state, preserved bootstrap inventory, scoped platform/application ownership | Deferred Snowflake service-user/account-monitor adoption needs an approved infrastructure identity |
+| AC-01: managed infrastructure | [Adoption](terraform-adoption.md) and [completed owner import](snowflake-owner-adoption.md): protected separate state; all three SERVICE users imported; official-provider normal plan clean at fifteen Snowflake instances | Owner review of unsupported account-monitor attachment coverage and refresh-only last-login metadata exception; no remaining user imports |
 | AC-02: code delivery without data start | [Delivery](delivery.md): actual credential-free PR checks, protected public-repository environment/OIDC, direct-launch denials, checked-merge promotion, overlap, code rollback and partial-apply recovery; strengthened-guard promotion/replay passed at version 7 | Owner review; public visibility explicitly approved |
 | AC-03: coordinated refresh and completion | [Baseline](baseline.md): actual withheld-month addition; [cloud](cloud-jobs.md): full-module workflow, four stopped tasks, 810 terminal queries and independent 36-month/weather reconciliation | Remaining failure/delivery qualification is separate; complete positive-cloud path is verified |
 | AC-04: repeat/correction correctness | [Baseline](baseline.md), [analytics](analytics.md): local replay, changed preparation and controlled correction/rebuild comparison; [cloud](cloud-jobs.md): exact full-input replay, supported same-name/input launch reconciliation and successful next admission | Owner review; no new positive-path correctness gap identified |
@@ -26,11 +26,12 @@ or owner-acceptance statement.
 - The owner confirmed intentional public visibility on 2026-11-03 and authorized
   publication after a secrets/state/sensitive-evidence audit. This prerequisite is
   resolved; actual protected delivery still requires qualification.
-- Three Snowflake user imports need owner-level metadata visibility. Separately,
-  the pinned provider cannot read the account-monitor attachment even with more
-  privilege. The [exact gap and owner-only procedure](snowflake-adoption-gap.md)
-  distinguish these cases. Both remain deferred without blocking unrelated
-  delivery; full infrastructure acceptance remains incomplete.
+- Three Snowflake user imports completed under the owner-controlled boundary on
+  November 4; keys/defaults/grants/parameters remained unchanged, and the official
+  normal plan is clean. The pinned provider still cannot read the account-monitor
+  attachment; read-only verification passed without changing the binding. Refresh-only
+  reports only moving last-login observations and exits 2, so its literal clean gate
+  remains unmet. [Exact outcome and exceptions](snowflake-adoption-gap.md).
 - Terraform 1.13.4 has been restored with owner approval from HashiCorp's release
   site. Its checksum manifest has a verified HashiCorp signature, the archive
   checksum matches and the executable reports the pinned version. This prerequisite
@@ -52,14 +53,15 @@ presentation preparation can continue while they are unresolved.
   fencing qualified. AWS retry/timeout-engine tests use explicit synthetic errors;
   no naturally occurring S3 outage is claimed.
 - **19:** Consolidated evidence is ready for owner review, **not full acceptance**:
-  AC-01 still has the deferred user/attachment coverage described above, and known
+  AC-01 still has the attachment coverage/refresh-metadata exceptions described above, and known
   image findings/funding limits remain disclosed.
 - **20:** Presentation, diagrams, sanitized evidence and cleanup proposal are prepared.
   Owner walkthrough/acceptance remains outstanding; no destructive cleanup performed.
 
-All three managed Terraform roots have fresh no-change plans (53 platform, four
-application and twelve Snowflake instances). This is not a claim that deferred
-objects are managed. Final SQL scope covers 27 originating sessions with zero open
+The prior platform/application no-change evidence covers 53/four instances. The
+November 4 owner import has an official-provider normal no-change plan covering
+**fifteen Snowflake instances**, including all three users. No provider-managed
+account attachment or exit-zero refresh-only result is claimed. Final prior SQL scope covers 27 originating sessions with zero open
 matching transactions and no active test claim. Production remains 36 months and
 22,562,477 rows; all task revisions 3–7 remain ACTIVE. The final warehouse observation
 is SUSPENDED, X-Small, with zero running/queued statements and auto-suspend 60 seconds.

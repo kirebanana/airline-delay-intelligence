@@ -1,9 +1,6 @@
-# NOT ACTIVE: service-user adoption requires an owner-authorized infrastructure
-# identity. SHOW USERS redacts TYPE under all three current service roles, although
-# DESC USER confirms SERVICE. The provider interprets redacted TYPE as changed
-# externally and proposes replacement. Never remove prevent_destroy/ignore TYPE or
-# grant MANAGE GRANTS to a workload identity just to produce a green plan.
-# Review authentication/ownership and its exact plan before enabling these blocks.
+# Adoption configuration prepared; no import/apply is authorized until the owner
+# authentication preflight and exact three-import/no-change saved-plan approval.
+# Never use workload credentials for identity_owner or suppress user TYPE drift.
 variable "service_public_keys" {
   description = "Reviewed existing PUBLIC keys, not private authentication material."
   type        = map(string)
@@ -20,7 +17,9 @@ resource "snowflake_service_user" "builder" {
   default_secondary_roles_option = "ALL"
   disabled                       = "false"
   rsa_public_key                 = var.service_public_keys["builder"]
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 resource "snowflake_service_user" "publisher" {
   provider                       = snowflake.identity_owner
@@ -32,7 +31,9 @@ resource "snowflake_service_user" "publisher" {
   default_secondary_roles_option = "ALL"
   disabled                       = "false"
   rsa_public_key                 = var.service_public_keys["publisher"]
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 resource "snowflake_service_user" "reader" {
   provider                       = snowflake.identity_owner
@@ -44,7 +45,9 @@ resource "snowflake_service_user" "reader" {
   default_secondary_roles_option = "ALL"
   disabled                       = "false"
   rsa_public_key                 = var.service_public_keys["reader"]
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 import {
   to = snowflake_service_user.builder
