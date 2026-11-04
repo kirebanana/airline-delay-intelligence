@@ -40,6 +40,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python -m unittest discover -s tests
+          uv run --locked python -m unittest discover -s infra/snowflake -p 'test_*adoption.py'
       - name: Parse dbt without warehouse credentials
         run: uv run --locked dbt parse --no-partial-parse --project-dir dbt --profiles-dir dbt
       - name: Validate Terraform without a backend or credentials

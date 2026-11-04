@@ -10,6 +10,12 @@ and [initial data/recovery snapshot](evidence/qualification-summary.json) for da
 measured results. The earlier snapshot's GitHub/tooling prerequisites have since
 been resolved; neither file is live status or owner acceptance.
 
+The [November 4 owner-import evidence](evidence/snowflake-importer-bootstrap.json)
+adds all three existing SERVICE users to protected Terraform state: fifteen Snowflake
+instances, zero object changes, official-plugin normal plan clean. Read-only account
+monitor verification passed. Disclose the unsupported attachment coverage and the
+refresh-only last-login metadata exception; neither is silently waived.
+
 ## The story in ten minutes
 
 1. **Question and scope (one minute).** Explain historical airline reliability,
@@ -76,8 +82,9 @@ flowchart TD
     Block --> Attend[Attended exact task, session, transaction and publication reconciliation]
 ```
 
-The trusted-promotion/OIDC path remains subject to actual repository protection and
-permission qualification; a diagram is not evidence that those controls are live.
+The trusted-promotion/OIDC path was qualified through the actual protected release
+workflow; [delivery evidence](delivery.md) records allowed/denied trust, promotion,
+overlap and rollback/recovery. The diagram alone is not the evidence.
 
 ## Preserve before trial expiry
 

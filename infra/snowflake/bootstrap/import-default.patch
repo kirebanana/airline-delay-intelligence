@@ -1,0 +1,14 @@
+diff --git a/pkg/resources/user.go b/pkg/resources/user.go
+--- a/pkg/resources/user.go
++++ b/pkg/resources/user.go
+@@ -281,6 +281,10 @@ func GetImportUserFunc(userType sdk.UserType) func(ctx context.Context, d *schema.Res
+ 
+ 		err = errors.Join(
++			// Import the provider's own "leave unset" sentinel into Terraform state.
++			// No Snowflake property is set or unset. Without this, CustomizeDiff
++			// sees null -> -1 and Update attempts ALTER USER UNSET MINS_TO_UNLOCK.
++			d.Set("mins_to_unlock", IntDefault),
+ 			d.Set("name", id.Name()),
+ 			setFromStringPropertyIfNotNullOrEmpty(d, "login_name", userDetails.LoginName),
+ 			setFromStringPropertyIfNotNullOrEmpty(d, "display_name", userDetails.DisplayName),
+ 			setFromStringPropertyIfNotNullOrEmpty(d, "default_namespace", userDetails.DefaultNamespace),

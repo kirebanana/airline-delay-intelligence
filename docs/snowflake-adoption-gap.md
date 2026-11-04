@@ -1,21 +1,29 @@
-# Deferred Snowflake adoption and minimum owner procedure
+# Snowflake adoption outcome and remaining provider coverage
 
-**Status: deferred, 2026-11-03.** Existing objects, authentication, account budget
-binding and production releases are preserved. These gaps prevent full managed-
-infrastructure acceptance, not unrelated authorized application/delivery testing.
+**Status: all three SERVICE users imported, 2026-11-04; official-provider normal plan
+clean at fifteen managed instances. Account-attachment Terraform coverage remains
+deferred, and literal no-difference refresh-only verification is an explicit metadata
+exception.** Existing authentication, account budget binding and production releases
+are preserved. Full acceptance still needs owner review of the disclosed exceptions.
 
-## Exact remaining inventory
+## Exact inventory and disposition
 
-| Terraform address | Existing object | Why current authentication is insufficient |
+| Terraform address | Existing object | Disposition |
 | --- | --- | --- |
-| `snowflake_service_user.builder` | `AIRLINE_DEV` | Workload role lacks owner-level metadata visibility for provider reads. |
-| `snowflake_service_user.publisher` | `AIRLINE_PUBLISHER` | Same visibility issue. |
-| `snowflake_service_user.reader` | `AIRLINE_READER` | Same visibility issue. |
+| `snowflake_service_user.builder` | `AIRLINE_DEV` | Imported using the explicitly approved no-change plan and human-owner provider boundary. |
+| `snowflake_service_user.publisher` | `AIRLINE_PUBLISHER` | Imported; existing keys, defaults, grants and parameters unchanged. |
+| `snowflake_service_user.reader` | `AIRLINE_READER` | Imported; same unchanged-identity verification. |
 | `snowflake_current_account.budget_attachment` (proposed resource) | Existing account-level binding to `AIRLINE_BUDGET` | **Provider limitation, not just missing privileges:** provider 2.21.0 does not read this attachment into state. |
 
-Twelve static instances, including the monitor object itself, are already imported
-and stored in the protected remote backend. The remaining examples are inactive.
+Fifteen instances, including the monitor object and all three users, are now managed
+in the protected backend. The account-attachment example stays inactive. The official
+provider is restored; no permanent fork or administrative workload grant was used.
 No runtime data objects, accepted facts or frozen releases need privileged import.
+
+The official normal plan exits 0 with no changes. Refresh-only exits 2 solely for
+read-only last-login observations on the three users, with zero resource actions.
+This is recorded, not suppressed or counted as a literal clean refresh-only result.
+[Actual outcome, evidence and reproducible owner boundary](snowflake-owner-adoption.md).
 
 ## User metadata boundary
 
@@ -33,29 +41,10 @@ today; the missing authority is metadata/user administration, not a bad key.
 
 ## Minimum safe owner-only procedure
 
-1. Use the owner's existing local authentication and a role that already owns or
-   inherits ownership of the three user objects. **Do not send personal credentials,
-   tokens, keys, browser sessions or connection configuration to the agent.** No new
-   privileges or login are needed if the owner already holds the owning roles.
-2. Owner verifies exact SHOW rows expose TYPE=SERVICE and DESC/SHOW PARAMETERS work
-   for all three users. Do not assume SECURITYADMIN alone owns every user.
-3. Prepare a separate `snowflake.identity_owner` provider alias used only by those
-   three resources. Preserve existing public keys, defaults, role assignments and
-   user types. Keep workload providers and CI credentials unchanged.
-4. Back up protected remote state and obtain its normal lock. Owner runs Terraform
-   in their own session. Import IDs are `"AIRLINE_DEV"`, `"AIRLINE_PUBLISHER"` and
-   `"AIRLINE_READER"`, including the identifier quotes.
-5. Review a saved plan with **exactly three imports and zero remote creates, updates,
-   replacements or deletes**. Any type/default/key change stops the procedure.
-   Apply only the approved exact plan and verify a subsequent no-change refresh.
-6. Return only sanitized action counts, revision/plan hashes and unchanged public-
-   key fingerprints. Raw authentication, state and binary plans remain protected.
-
-If no existing owner role can do this, a separate proposal may transfer ownership
-of only these three user objects to a dedicated owner-controlled infrastructure
-role. User ownership can alter authentication and is **not read-only**; that transfer
-is a security change requiring separate approval. It is not necessary for ongoing
-delivery. No ownership transfer has been performed.
+The exact SQL, separate owner-profile setup and three-import/zero-change approval
+procedure are authoritative in [owner-controlled adoption](snowflake-owner-adoption.md).
+Use existing human authority: the current scope does not authorize new grants,
+ownership transfers, authentication changes or workload privilege escalation.
 
 ## Account-monitor attachment is different
 

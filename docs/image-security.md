@@ -1,6 +1,6 @@
 # Workload image security assessment
 
-**Reviewed 2026-11-03.** This assessment preserves scanner findings; it is not a
+**Reviewed 2026-11-04.** This assessment preserves scanner findings; it is not a
 claim of a clean image or proof that every transitive dependency is unreachable.
 
 ## Three HIGH findings
@@ -31,15 +31,52 @@ deployment-safety fix, not a repair of the operating-system CVEs.
 An isolated, credential-free container refreshed the configured Debian indexes and
 confirmed that installed `libc6` and `zlib1g` exactly equal their stable candidates.
 There is **no supported stable package update to apply** for these findings at this
-checkpoint. The Dockerfile already upgrades packages during build. Switching the
+checkpoint (rechecked November 4 inside the exact deployed `015ad694…` digest).
+Python's compile-time and runtime zlib versions both report **1.3.1**.
+The Dockerfile already upgrades packages during build. Switching the
 runtime to Debian unstable, hand-building glibc, suppressing findings or relabeling
 the image is not a safe routine vulnerability fix and has not been done.
 
-No application call to the affected glibc APIs is identified in project source;
-this is not a complete reachability proof for native dependencies. Python gzip
-usage does not establish use of zlib's nonblocking `gzprintf` writer. Existing
+No application call to the affected glibc APIs is identified in project source.
+A network-disabled, read-only ELF inventory of the exact deployed image examined
+**616 ELF files**, with no unsupported ELF formats. It found no direct undefined
+dynamic references to `ns_printrr`, `ns_printrrf`, `fp_nquery`, `strfmon`, `strfmon_l`,
+`gzprintf` or `gzvprintf`; the only `gzwrite` reference was in `libapt-pkg.so.7.0.0`,
+not the application processing path. Python `locale.currency` source also does not
+call `strfmon`. These are useful negative observations, **not** a complete native
+reachability proof: static/internal calls, `dlsym`, and runtime control/data flow
+are outside that inventory.
+
+Practical exposure requires the specific vulnerable paths: DNS TSIG record printing
+for CVE-2026-5435; susceptible right-justified monetary formatting for
+CVE-2026-19499; or nonblocking gzip writes that stall and then use formatted output
+for CVE-2026-85091. No such workload path has been identified. Python gzip
+usage alone does not establish use of zlib's nonblocking formatted writer. Existing
 nonroot/read-only/capability-drop/no-ingress/finite-execution controls reduce exposure
 but do not repair vulnerable library code or waive findings.
+
+## Supported fixes and alternative bases
+
+- **Current Debian trixie:** installed versions still equal the fresh stable
+  candidates. Keep all HIGH findings visible; recheck supported vendor updates at
+  the next build. Debian's `no-dsa`/minor classification is not a scanner override.
+- **Debian bookworm:** not a demonstrated fix. The current Debian tracker also
+  labels bookworm vulnerable for all three, including the disputed zlib range.
+- **Alpine/musl:** avoids these glibc implementations, but does not automatically
+  fix zlib. Native-wheel compatibility for the pinned Snowflake/dbt/PyArrow stack,
+  image tests and the processing contract would need requalification. No compatible
+  replacement image has been established; this is not a small verified patch.
+- **A smaller/distroless glibc image:** removing tools reduces surface but does not
+  establish that retained glibc/zlib code is fixed. A replacement needs exact-version
+  vendor evidence, native-dependency checks, scan and workload qualification.
+- **Unstable packages or hand-built libc:** not a supported stable upgrade; do not
+  replace core libraries ad hoc or mix distributions to obtain a clean scan.
+
+**Recommendation:** retain the qualified immutable image for the final walkthrough,
+with the three unsuppressed HIGH findings explicitly disclosed and no proven
+application exploit path. This is a residual-risk recommendation, not owner risk
+acceptance or a claim of non-exploitability. No new image was built or promoted for
+this assessment; a base migration would be a separate approved change.
 
 ## Promotion and follow-up
 
@@ -53,7 +90,9 @@ fix becomes available. Preserve previous images and releases for code rollback.
 
 - AWS ECR `DescribeImageScanFindings`, exact candidate digest, 2026-11-03.
 - `apt-cache policy libc6 zlib1g`, `dpkg-query`, and Python zlib compile/runtime
-  versions inside the candidate container after a fresh package-index download.
+  versions inside the exact deployed container after a fresh November 4 package-index download.
+- November 4 exact-image dynamic-symbol inventory: 616 ELF files; limited as above.
+- [Official Python image Alpine/musl caveat](https://github.com/docker-library/docs/blob/master/python/README.md#pythonversion-alpine).
 - [Debian CVE-2026-5435](https://security-tracker.debian.org/tracker/CVE-2026-5435).
 - [Debian CVE-2026-19499](https://security-tracker.debian.org/tracker/CVE-2026-19499).
 - [Debian CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091).
