@@ -87,6 +87,13 @@ diagnostics until requested (six core versus twelve detailed aggregate queries).
 Regression coverage includes numeric ordering, label-axis configuration, weather
 scope boundaries, threshold cache reuse and diagnostic query counts. No metric
 definitions, dbt models or publication/infrastructure boundaries changed.
+Final refinement validation: 146 automated tests (115 passed, 31 opt-in live skips),
+lint/format passed. Actual browser interaction confirmed ascending numeric category
+sorting, complete carrier labels at 1440/900/600px, bounded route/airport detail,
+weather entry/alignment, physical band order and threshold support. Sixteen matching
+captured aggregate results remained unchanged. Changing the weather threshold
+reused the cached weather result; requesting diagnostics performed the additional
+read explicitly. No further independent-review cycle was run.
 Screenshots/internal review evidence stay in
 ignored workspace scratch storage. No application deployment or data processing
 was performed by this local implementation/validation cycle.
