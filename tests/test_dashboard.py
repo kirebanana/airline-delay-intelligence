@@ -5,9 +5,14 @@ import unittest
 if importlib.util.find_spec("streamlit"):
     from streamlit.testing.v1 import AppTest
 
-    from airline_warehouse.dashboard import render
 else:
     AppTest = None
+
+
+def render(reader):
+    from airline_warehouse.dashboard import render as dashboard
+
+    dashboard(reader)
 
 
 class FixtureReader:
@@ -101,10 +106,22 @@ class DashboardTests(unittest.TestCase):
                     "daily": [],
                     "comparisons": []
                     if filters.origin == 14771
-                    else [{"LOCAL_DATES": 1, "SCHEDULED_ROWS": 10}],
+                    else [
+                        {
+                            "VARIABLE": "temperature",
+                            "BAND": "cold",
+                            "LOCAL_DATES": 1,
+                            "SCHEDULED_ROWS": 10,
+                            "DEPARTURE_DENOMINATOR": 8,
+                            "DEPARTURE_DELAY_RATE": 0.25,
+                            "CANCELLATION_RATE": 0.1,
+                            "LARGEST_DATE_SHARE": 1,
+                        }
+                    ],
                 }
 
         app = AppTest.from_function(render, args=(WeatherReader(),)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
         self.assertFalse(app.exception)
         self.assertTrue(any("five local dates" in w.value for w in app.warning))
         app.selectbox(key="origin").set_value(14771).run()
@@ -113,11 +130,12 @@ class DashboardTests(unittest.TestCase):
 
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        app.radio(key="task").set_value("Disruption & recovery").run()
         self.assertFalse(app.exception)
         headings = [h.value for h in app.subheader]
         self.assertIn("Reported delay categories", headings)
         self.assertIn("Schedule-relative recovery", headings)
-        self.assertTrue(any("1345" in str(w.value) for w in app.warning))
+        self.assertTrue(any("1,345" in str(w.value) for w in app.warning))
         self.assertTrue(
             any("20" in str(w.value) and "Excluded" in str(w.value) for w in app.markdown)
         )
@@ -142,6 +160,44 @@ class DashboardTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertTrue(any("UNPUBLISHED" in w.value for w in app.warning))
         self.assertEqual(app.metric[0].value, "60.0%")
+        self.assertIsNone(app.selectbox(key="origin").value)
+        self.assertEqual(app.multiselect(key="carriers").value, [])
+        app.selectbox(key="destination").set_value(11292).run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+        app.selectbox(key="origin").set_value(14771).run()
+        app.multiselect(key="carriers").set_value([19393]).run()
+        app.number_input(key="minimum").set_value(200).run()
+        app.button(key="reset").click().run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+        self.assertIsNone(app.selectbox(key="destination").value)
+        self.assertEqual(app.multiselect(key="carriers").value, [])
+        self.assertEqual(app.number_input(key="minimum").value, 100)
+        self.assertEqual(app.metric[0].value, "60.0%")
+        app.selectbox(key="destination").set_value(11292).run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+
+    def test_route_swap_and_prior_year_unavailable_are_safe(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        app.radio(key="task").set_value("Time & routes").run()
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        next(b for b in app.button if b.label == "Reverse route").click().run()
+        self.assertEqual(app.selectbox(key="origin").value, 14771)
+        self.assertEqual(app.selectbox(key="destination").value, 11292)
+        self.assertFalse(app.error)
+        self.assertTrue(app.checkbox[0].disabled)
+
+    def test_unrelated_sections_are_not_queried(self):
+        class CountingReader(FixtureReader):
+            def secondary(self, *args):
+                raise AssertionError("Network task must not query secondary")
+
+            def weather(self, *args):
+                raise AssertionError("Network task must not query weather")
+
+        app = AppTest.from_function(render, args=(CountingReader(),)).run()
+        self.assertFalse(app.error)
+        self.assertFalse(app.exception)
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
         self.assertEqual(app.metric[0].value, "N/A")
