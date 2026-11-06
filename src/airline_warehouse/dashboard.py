@@ -24,12 +24,15 @@ from airline_warehouse.dashboard_views import (
     RATES,
     RECOVERY_ORDER,
     TASKS,
+    WEATHER_BANDS,
     comparison_table,
     group_label,
     number,
     ordered_rows,
     percent,
+    percent_value,
     prior_year,
+    weather_scope,
     weather_support,
 )
 
@@ -50,8 +53,8 @@ def cached_secondary(identity, descriptor, filters, _reader):
 
 
 @st.cache_data(ttl=900, max_entries=128, show_spinner=False)
-def cached_weather(identity, descriptor, filters, _reader):
-    return _reader.weather(descriptor, filters)
+def cached_weather(identity, descriptor, filters, details, _reader):
+    return _reader.weather(descriptor, filters, details=details)
 
 
 class Reader:
@@ -94,9 +97,13 @@ class Reader:
             self.connection, descriptor, filters, development=descriptor.get("development", False)
         )
 
-    def weather(self, descriptor, filters):
+    def weather(self, descriptor, filters, *, details=True):
         return query_weather(
-            self.connection, descriptor, filters, development=descriptor.get("development", False)
+            self.connection,
+            descriptor,
+            filters,
+            development=descriptor.get("development", False),
+            details=details,
         )
 
 
@@ -106,12 +113,40 @@ def table(rows):
         for key in rows[0]:
             if any(isinstance(r.get(key), str) for r in rows):
                 continue
-            if key in ("On-time", "Cancelled", "Diverted", "Departure delayed"):
+            if key in (
+                "On-time",
+                "Cancelled",
+                "Diverted",
+                "Departure delayed",
+                "Minute share",
+                "Affected flights",
+                "Share",
+                "Coverage",
+                "Largest date",
+                "Current",
+                "Prior year",
+            ):
                 configs[key] = st.column_config.NumberColumn(format="%.1f%%")
-            elif key in ("Scheduled", "Arrival eligible", "Departure eligible", "Signed eligible"):
+            elif key in (
+                "Scheduled",
+                "Arrival eligible",
+                "Departure eligible",
+                "Signed eligible",
+                "Reported minutes",
+                "Cancelled rows",
+                "Flights",
+                "Matched",
+                "Unmatched",
+                "Current eligible",
+                "Prior eligible",
+                "Eligible",
+                "Excluded",
+            ):
                 configs[key] = st.column_config.NumberColumn(format="%,d")
             elif key in ("Median min", "p90 min"):
                 configs[key] = st.column_config.NumberColumn(format="%.1f")
+            elif key == "Change (pp)":
+                configs[key] = st.column_config.NumberColumn(format="%.2f")
         st.dataframe(rows, hide_index=True, width="stretch", column_config=configs)
     else:
         st.info("No observations for this selection. N/A is not zero performance.")
@@ -131,7 +166,10 @@ def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
         .encode(
             **{
                 "y" if horizontal else "x": category(
-                    f"{label}:N", sort=order or list(frame[label]), title=None
+                    f"{label}:N",
+                    sort=order or list(frame[label]),
+                    title=None,
+                    axis=alt.Axis(labelOverlap=False, labelLimit=240) if horizontal else alt.Axis(),
                 ),
                 "x" if horizontal else "y": measure(
                     f"{value}:Q", title=value, axis=alt.Axis(format=".0%" if rate else "~s")
@@ -142,7 +180,7 @@ def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
                 alt.Tooltip(f"{value}:Q", format=".1%" if rate else ",.1f"),
             ],
         )
-        .properties(height=max(180, len(rows) * 27) if horizontal else 270)
+        .properties(height=max(180, len(rows) * 32) if horizontal else 270)
     )
     st.altair_chart(chart, width="stretch")
 
@@ -200,6 +238,23 @@ def comparison(rows, group, summary, minimum):
     compact = comparison_table(selected, group)
     # Deliberate primary columns: trade-offs together, support and quantiles nearby.
     primary = ["Group", "On-time", "Cancelled", "Diverted", "Scheduled", "p90 min"]
+    if group == "airport":
+        metric_column = {
+            "Arrival on-time": "On-time",
+            "Cancellation": "Cancelled",
+            "Diversion": "Diverted",
+            "Departure delay ≥15 min": "Departure delayed",
+        }[metric]
+        support_column = {
+            "ARRIVAL_DENOMINATOR": "Arrival eligible",
+            "SCHEDULED_ROWS": "Scheduled",
+            "DEPARTURE_DENOMINATOR": "Departure eligible",
+        }[denominator]
+        primary = list(
+            dict.fromkeys(
+                ["Group", metric_column, support_column, "Cancelled", "Scheduled", "p90 min"]
+            )
+        )
     table([{k: r[k] for k in primary} for r in compact])
     with st.expander("All returned groups · eligibility and signed-delay summaries"):
         table(comparison_table(rows, group))
@@ -234,9 +289,9 @@ def disruption(data, minimum):
         [
             {
                 "Category": r["Category"],
-                "Reported minutes": number(r["Minutes"]),
-                "Minute share": percent(r["Minute share"]),
-                "Affected flights": percent(r["Affected"]),
+                "Reported minutes": r["Minutes"],
+                "Minute share": percent_value(r["Minute share"]),
+                "Affected flights": percent_value(r["Affected"]),
             }
             for r in categories
         ]
@@ -267,8 +322,8 @@ def disruption(data, minimum):
     reasons = [
         {
             "Reason": r["CANCELLATION_REASON"].replace("NAS", "National Airspace System (NAS)"),
-            "Cancelled rows": number(r["CANCELLED_ROWS"]),
-            "Share": percent(r["CANCELLED_SHARE"]),
+            "Cancelled rows": r["CANCELLED_ROWS"],
+            "Share": percent_value(r["CANCELLED_SHARE"]),
         }
         for r in data["cancellations"]
     ]
@@ -292,12 +347,12 @@ def disruption(data, minimum):
             "Share": float(r["ELIGIBLE_ROWS"]) / s["RECOVERY_ELIGIBLE"]
             if s["RECOVERY_ELIGIBLE"]
             else None,
-            "Flights": number(r["ELIGIBLE_ROWS"]),
+            "Flights": r["ELIGIBLE_ROWS"],
         }
         for r in bands
     ]
     plot(distribution, "Improvement band", "Share", rate=True)
-    table([{**r, "Share": percent(r["Share"])} for r in distribution])
+    table([{**r, "Share": percent_value(r["Share"])} for r in distribution])
     st.caption(
         "Ordinary noncancelled/nondiverted completions departing ≥15 min late with both "
         "signed delays known. Negative/zero improvement retained. Positive improvement "
@@ -330,6 +385,8 @@ def weather_view(data, minimum):
         }[x],
     )
     rows = [r for r in data["comparisons"] if r["VARIABLE"] == variable]
+    bands = WEATHER_BANDS[variable]
+    rows.sort(key=lambda r: bands.index(r["BAND"]) if r["BAND"] in bands else len(bands))
     if not rows:
         st.info("No DEN pilot rows match these filters; national weather is not available.")
     display = []
@@ -338,12 +395,12 @@ def weather_view(data, minimum):
         display.append(
             {
                 "Band": r["BAND"],
-                "Departure delayed": percent(r["DEPARTURE_DELAY_RATE"]),
-                "Cancelled": percent(r["CANCELLATION_RATE"]),
-                "Scheduled": number(r["SCHEDULED_ROWS"]),
-                "Departure eligible": number(r["DEPARTURE_DENOMINATOR"]),
+                "Departure delayed": percent_value(r["DEPARTURE_DELAY_RATE"]),
+                "Cancelled": percent_value(r["CANCELLATION_RATE"]),
+                "Scheduled": r["SCHEDULED_ROWS"],
+                "Departure eligible": r["DEPARTURE_DENOMINATOR"],
                 "Dates": r["LOCAL_DATES"],
-                "Largest date": percent(r["LARGEST_DATE_SHARE"]),
+                "Largest date": percent_value(r["LARGEST_DATE_SHARE"]),
                 "Support": "Limited"
                 if not all((dates, schedules, departures))
                 else "Thresholds met",
@@ -369,19 +426,20 @@ def weather_view(data, minimum):
         [
             {
                 "Flight status": "Cancelled" if r["CANCELLED"] else "Not cancelled",
-                "Scheduled": number(r["SCHEDULED_ROWS"]),
-                "Matched": number(r["MATCHED_ROWS"]),
-                "Coverage": percent(r["COVERAGE"]),
-                "Unmatched": number(r["SCHEDULED_ROWS"] - r["MATCHED_ROWS"]),
+                "Scheduled": r["SCHEDULED_ROWS"],
+                "Matched": r["MATCHED_ROWS"],
+                "Coverage": percent_value(r["COVERAGE"]),
+                "Unmatched": r["SCHEDULED_ROWS"] - r["MATCHED_ROWS"],
             }
             for r in coverage
         ]
     )
-    with st.expander("Full pilot qualification · unaffected by flight filters"):
-        table(data["pilot_coverage"])
-    with st.expander("Daily coverage and match-quality diagnostics"):
-        table([r for r in data["daily"] if r["VARIABLE"] == variable])
-        table(coverage)
+    if data["pilot_coverage"]:
+        with st.expander("Full pilot qualification · unaffected by flight filters"):
+            table(data["pilot_coverage"])
+        with st.expander("Daily coverage and match-quality diagnostics"):
+            table([r for r in data["daily"] if r["VARIABLE"] == variable])
+            table(coverage)
 
 
 def render(reader):
@@ -530,6 +588,18 @@ def render(reader):
         f"{', '.join(carriers[c] for c in chosen) or 'All carriers'} · "
         f"{label(origin)} → {label(destination)}"
     )
+    if task == TASKS[3]:
+        st.info(
+            "Weather pilot scope: DEN departures, January 2025 only. "
+            "Carrier, destination and dates within that month may narrow the pilot."
+        )
+        if not weather_scope(filters):
+            st.warning(
+                "Your flight filters are outside the weather pilot. "
+                "No national KPIs or mixed-population weather results are shown."
+            )
+            st.button("Align filters to DEN · January 2025", on_click=pilot, type="primary")
+            st.stop()
 
     def metrics(f=filters, group="all"):
         reader.validate(descriptor)  # validate even before cache hits; same pinned release
@@ -641,15 +711,13 @@ def render(reader):
                     [
                         {
                             "Measure": name,
-                            "Current": percent(summary[field]),
-                            "Prior year": percent(reference[field]),
-                            "Change (pp)": number(
-                                (float(summary[field]) - float(reference[field])) * 100, decimals=2
-                            )
+                            "Current": percent_value(summary[field]),
+                            "Prior year": percent_value(reference[field]),
+                            "Change (pp)": (float(summary[field]) - float(reference[field])) * 100
                             if summary[field] is not None and reference[field] is not None
-                            else "N/A",
-                            "Current eligible": number(summary[den]),
-                            "Prior eligible": number(reference[den]),
+                            else None,
+                            "Current eligible": summary[den],
+                            "Prior eligible": reference[den],
                         }
                         for name, (field, den) in RATES.items()
                     ]
@@ -666,7 +734,7 @@ def render(reader):
                 reader.validate(descriptor)
                 disruption(
                     cached_secondary(
-                        cache_identity(descriptor, filters, "all", minimum, 500),
+                        cache_identity(descriptor, filters, "all", 1, 500),
                         descriptor,
                         filters,
                         reader,
@@ -676,12 +744,14 @@ def render(reader):
             else:
                 st.info("This release does not contain secondary analyses.")
         elif descriptor.get("weather"):
+            details = st.checkbox("Load full-pilot and daily diagnostics", key="weather_details")
             reader.validate(descriptor)
             weather_view(
                 cached_weather(
-                    cache_identity(descriptor, filters, "all", minimum, 500),
+                    cache_identity(descriptor, filters, "all", 1, 500),
                     descriptor,
                     filters,
+                    details,
                     reader,
                 ),
                 minimum,
@@ -699,8 +769,8 @@ def render(reader):
             [
                 {
                     "Measure": name,
-                    "Eligible": number(summary[den]),
-                    "Excluded": number(summary["SCHEDULED_ROWS"] - summary[den]),
+                    "Eligible": summary[den],
+                    "Excluded": summary["SCHEDULED_ROWS"] - summary[den],
                 }
                 for name, (_, den) in RATES.items()
             ]

@@ -32,6 +32,24 @@ def percent(value):
     return "N/A" if value is None else f"{float(value):.1%}"
 
 
+def percent_value(value):
+    """Numeric percentage points for sortable cells; format only at the column layer."""
+    return None if value is None else float(value) * 100
+
+
+WEATHER_BANDS = {
+    "temperature": ["<−10 °C", "−10–<0 °C", "≥0 °C", "Unmatched"],
+    "wind": ["<5 m/s", "5–<10 m/s", "≥10 m/s", "Unmatched"],
+    "visibility": ["<1600 m", "1600–<5000 m", "≥5000 m", "Unmatched"],
+}
+
+
+def weather_scope(filters):
+    return filters.origin == 11292 and dt.date(
+        2025, 1, 1
+    ) <= filters.start <= filters.end <= dt.date(2025, 1, 31)
+
+
 def group_label(row, group):
     if group == "carrier":
         return row["MARKETING_LABEL"]

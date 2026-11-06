@@ -3,15 +3,40 @@ import unittest
 
 from airline_warehouse.analytics import Filters
 from airline_warehouse.dashboard_views import (
+    WEATHER_BANDS,
     comparison_table,
     group_label,
     ordered_rows,
+    percent_value,
     prior_year,
+    weather_scope,
     weather_support,
 )
 
 
 class PresentationTests(unittest.TestCase):
+    def test_weather_scope_requires_pilot_origin_and_contained_dates(self):
+        base = Filters(dt.date(2025, 1, 1), dt.date(2025, 1, 31))
+        from dataclasses import replace
+
+        self.assertFalse(weather_scope(base))
+        self.assertTrue(weather_scope(replace(base, origin=11292)))
+        self.assertFalse(weather_scope(replace(base, origin=11292, end=dt.date(2025, 2, 1))))
+        self.assertEqual(WEATHER_BANDS["wind"], ["<5 m/s", "5–<10 m/s", "≥10 m/s", "Unmatched"])
+        self.assertIsNone(percent_value(None))
+        self.assertEqual(percent_value(0.06), 6.0)
+
+    def test_horizontal_axis_disables_label_suppression(self):
+        from unittest.mock import patch
+
+        from airline_warehouse.dashboard import plot
+
+        with patch("airline_warehouse.dashboard.st.altair_chart") as draw:
+            plot([{"Group": str(i), "Rate": 0.5} for i in range(10)], "Group", "Rate", rate=True)
+        spec = draw.call_args.args[0].to_dict()
+        self.assertFalse(spec["encoding"]["y"]["axis"]["labelOverlap"])
+        self.assertGreaterEqual(spec["height"], 320)
+
     def test_comparison_cells_keep_numeric_sorting_and_missing_quantiles(self):
         row = {
             "MARKETING_LABEL": "UA",

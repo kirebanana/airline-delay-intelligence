@@ -92,12 +92,45 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_secondary_values_sort_numerically_and_threshold_reuses_results(self):
+        class NumericReader(FixtureReader):
+            calls = 0
+
+            def pin(self):
+                return {**super().pin(), "processing_contract": "numeric-sort-fixture"}
+
+            def secondary(self, descriptor, filters):
+                self.calls += 1
+                result = super().secondary(descriptor, filters)
+                result["categories"] = [
+                    {
+                        "CATEGORY": str(i),
+                        "MINUTE_SHARE": value,
+                        "REPORTED_MINUTES": i * 100,
+                        "AFFECTED_RATE": value,
+                    }
+                    for i, value in enumerate([0.002, 0.195, 0.339, 0.404, 0.06])
+                ]
+                return result
+
+        reader = NumericReader()
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("Disruption & recovery").run()
+        frame = next(d.value for d in app.dataframe if "Minute share" in d.value.columns)
+        self.assertEqual(
+            list(frame.sort_values("Minute share")["Minute share"].round(1)),
+            [0.2, 6.0, 19.5, 33.9, 40.4],
+        )
+        app.number_input(key="minimum").set_value(800).run()
+        self.assertFalse(app.error)
+        self.assertEqual(reader.calls, 1)
+
     def test_fixed_weather_scope_coverage_and_empty_non_den_filters(self):
         class WeatherReader(FixtureReader):
             def pin(self):
                 return {**super().pin(), "weather": {"weather_id": "fixture-only"}}
 
-            def weather(self, descriptor, filters):
+            def weather(self, descriptor, filters, *, details=True):
                 return {
                     "pilot_coverage": [
                         {"VARIABLE": "temperature", "SCHEDULED_ROWS": 10, "MATCHED_ROWS": 10}
@@ -122,11 +155,15 @@ class DashboardTests(unittest.TestCase):
 
         app = AppTest.from_function(render, args=(WeatherReader(),)).run()
         app.radio(key="task").set_value("DEN weather investigation").run()
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("outside the weather pilot" in w.value for w in app.warning))
+        app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
         self.assertTrue(any("five local dates" in w.value for w in app.warning))
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
-        self.assertTrue(any("No DEN pilot rows" in w.value for w in app.info))
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("outside the weather pilot" in w.value for w in app.warning))
 
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()

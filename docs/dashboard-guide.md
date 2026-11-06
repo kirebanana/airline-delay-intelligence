@@ -23,9 +23,12 @@ publish data. One release descriptor is reused throughout each render.
   means the flight worsened. Arriving below 15 minutes late is distinct from any
   positive improvement.
 - **DEN weather investigation:** **Use DEN · January 2025** selects the qualified
-  pilot. Explore temperature, wind or visibility separately. Inspect departure
+  pilot. When filters are outside that pilot, no KPIs/results appear; the main
+  **Align filters to DEN · January 2025** action explicitly selects the pilot.
+  Explore temperature, wind or visibility separately. Inspect departure
   eligibility, cancellations, date support, largest-date concentration and missing
-  matches. Full-pilot qualification stays in separate expandable detail. This is
+  matches. Full-pilot and daily diagnostics load only when explicitly requested;
+  changing support thresholds reuses the same analytical aggregates. This is
   scheduled weather context, not national weather or a causal explanation.
 
 ## Controls and interpretation

@@ -1,7 +1,7 @@
 # Dashboard product improvements
 
-**Status: scope approved by owner, 2026-11-06; implemented and browser-reviewed;
-final owner acceptance pending with remaining corrections.**
+**Status: scope and final focused corrections approved by owner, 2026-11-06;
+implementation complete; final owner product acceptance pending.**
 This bounded UI/analytics improvement batch supplements the
 [project specification](airline-delay-intelligence.md). Final product acceptance is
 separate from implementation and from infrastructure/security acceptance.
@@ -74,7 +74,19 @@ but did **not** recommend unconditional acceptance. Outstanding findings:
   selected departure metric; weather/secondary caching can avoid threshold-driven
   refetches and eager collapsed diagnostics.
 
-These are reported for owner decision, not silently waived. No further redesign
-was started from the final review. Screenshots/internal review evidence stay in
+The owner subsequently authorized one focused correction pass, not another redesign.
+Numeric cells now remain numeric and are formatted by column; categorical horizontal
+axes explicitly retain all labels. Weather-task entry requires DEN-origin dates
+contained in January 2025 before displaying any KPIs, with a prominent explicit
+alignment action rather than silently changing the user's filters. Weather bands
+follow physical order, with unmatched last. Airport primary detail includes the
+selected metric and support. Threshold-independent secondary/weather cache keys
+avoid refetching unchanged results; core weather reads omit full-pilot/daily
+diagnostics until requested (six core versus twelve detailed aggregate queries).
+
+Regression coverage includes numeric ordering, label-axis configuration, weather
+scope boundaries, threshold cache reuse and diagnostic query counts. No metric
+definitions, dbt models or publication/infrastructure boundaries changed.
+Screenshots/internal review evidence stay in
 ignored workspace scratch storage. No application deployment or data processing
 was performed by this local implementation/validation cycle.
