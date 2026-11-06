@@ -1,6 +1,7 @@
 # Dashboard product improvements
 
-**Status: scope approved by owner, 2026-11-06; implementation validation pending.**
+**Status: scope approved by owner, 2026-11-06; implemented and browser-reviewed;
+final owner acceptance pending with remaining corrections.**
 This bounded UI/analytics improvement batch supplements the
 [project specification](airline-delay-intelligence.md). Final product acceptance is
 separate from implementation and from infrastructure/security acceptance.
@@ -52,3 +53,28 @@ Comparisons remain descriptive and unadjusted for traffic mix. A prior-year peri
 maps inclusive calendar dates, clamping February 29 to February 28 explicitly.
 
 No owner acceptance is inferred from passing tests or an independent review.
+
+## Validation outcome — 2026-11-06
+
+Automated discovery: 142 tests, 111 passed and 31 opt-in live skips; lint/format
+checks passed. Actual released-data browser validation exercised all four tasks,
+combined filters, reset/subsequent edits, empty states, reverse routes and prior-year
+comparisons at desktop, 900px and 600px. Twenty same-filter captured aggregate
+results exactly matched the original dashboard; this is not a new raw-source audit.
+
+A fresh independent browser-based product review rated the result 7.5/10 overall:
+analytical quality 8, usability 7.5, presentation 7 and completeness 8.5. It confirmed
+the reset/hour-order fixes, responsive KPIs and useful comparative capabilities,
+but did **not** recommend unconditional acceptance. Outstanding findings:
+
+- Formatted numeric strings in secondary tables sort lexicographically.
+- Some horizontal charts suppress alternating group labels.
+- Weather-task entry can foreground national flight KPIs above fixed-pilot results.
+- Weather bands need physical order; airport primary detail should include its
+  selected departure metric; weather/secondary caching can avoid threshold-driven
+  refetches and eager collapsed diagnostics.
+
+These are reported for owner decision, not silently waived. No further redesign
+was started from the final review. Screenshots/internal review evidence stay in
+ignored workspace scratch storage. No application deployment or data processing
+was performed by this local implementation/validation cycle.
