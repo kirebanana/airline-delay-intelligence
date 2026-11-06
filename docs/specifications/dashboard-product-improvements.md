@@ -1,0 +1,54 @@
+# Dashboard product improvements
+
+**Status: scope approved by owner, 2026-11-06; implementation validation pending.**
+This bounded UI/analytics improvement batch supplements the
+[project specification](airline-delay-intelligence.md). Final product acceptance is
+separate from implementation and from infrastructure/security acceptance.
+
+## Approved scope
+
+Correct reset/widget synchronization, numeric hour ordering and metric-specific
+weather support wording. Present carrier reliability trade-offs, bounded
+volume-selected route/airport comparisons with population disclosures, chronological
+time exploration, equivalent prior-year periods and route reversal. Shape category,
+cancellation and signed-recovery evidence without changing population definitions.
+
+Organize the existing Streamlit dashboard into Network & carriers, Time & routes,
+Disruption & recovery, and DEN weather investigation. Query only the active task's
+analytical sections. Retain one pinned release per render, validation before cached
+results, restricted reader access and existing metric definitions.
+
+No new framework, models, cloud resources, ingestion, refresh, data publication or
+deployment is authorized by this batch. Existing unrelated working changes are not
+part of it. No causal inference, composite carrier score or passenger-impact estimate.
+
+## Acceptance
+
+- Real browser reset clears visible carrier/route/dates and restores national counts;
+  subsequent filtering cannot resurrect old selections.
+- Rendered hours follow 0–23, with source 2400 explicit; weekdays ordered/named.
+- Carrier punctuality, cancellation, diversion, volume and signed tail delay are
+  readable together; metric eligibility remains accessible.
+- Route/airport charts have a bounded plot count and disclose volume selection and
+  represented schedules, never imply complete-network best/worst rankings.
+- Prior-year comparison preserves carrier/route filters, uses aggregate counts,
+  discloses leap-day handling and refuses incomplete reference coverage.
+- Category minutes, affected-flight rates, cancelled-row reasons and signed recovery
+  retain their distinct units/populations; missing observations remain visible.
+- DEN coverage separates full pilot qualification from filtered context and uses
+  scheduled versus departure-eligible support accurately.
+- All four tasks work in a real browser. KPI values remain fully visible at 1440,
+  900 and 600px. Automated regression tests supplement, not replace, visual evidence.
+- Bounded released-data checks preserve established rates/quantiles. A fresh
+  independent product review critiques the revised UI before owner acceptance.
+
+## Design decisions / trade-offs
+
+Preserve Streamlit and the query/publication architecture. Active-task lazy reads
+reduce unrelated query fan-out; immutable-release options can cache for 15 minutes
+while release-token validation still runs before result use. Immediate filters keep
+visible controls aligned with results; no invisible draft/applied filter split.
+Comparisons remain descriptive and unadjusted for traffic mix. A prior-year period
+maps inclusive calendar dates, clamping February 29 to February 28 explicitly.
+
+No owner acceptance is inferred from passing tests or an independent review.
