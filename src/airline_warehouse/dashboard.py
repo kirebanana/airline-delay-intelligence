@@ -1,12 +1,18 @@
-"""Thin local-only aggregate presentation; no refresh or publication side effects."""
+"""Local release-pinned analytics. No refresh/publication side effects."""
 
+import datetime as dt
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 
 from airline_warehouse.analytics import (
+    Filters,
+    cache_identity,
     filter_options,
     query_metrics,
     query_secondary,
@@ -14,6 +20,21 @@ from airline_warehouse.analytics import (
     relation,
 )
 from airline_warehouse.connection import connect_as
+from airline_warehouse.dashboard_views import (
+    RATES,
+    RECOVERY_ORDER,
+    TASKS,
+    WEATHER_BANDS,
+    comparison_table,
+    group_label,
+    number,
+    ordered_rows,
+    percent,
+    percent_value,
+    prior_year,
+    weather_scope,
+    weather_support,
+)
 
 
 @st.cache_data(ttl=900, max_entries=256, show_spinner=False)
@@ -21,7 +42,7 @@ def cached_metrics(identity, descriptor, filters, group, minimum, _reader):
     return _reader.metrics(descriptor, filters, group, minimum)
 
 
-@st.cache_data(ttl=15, max_entries=16, show_spinner=False)
+@st.cache_data(ttl=900, max_entries=16, show_spinner=False)
 def cached_options(identity, descriptor, _reader):
     return _reader.options(descriptor)
 
@@ -32,8 +53,8 @@ def cached_secondary(identity, descriptor, filters, _reader):
 
 
 @st.cache_data(ttl=900, max_entries=128, show_spinner=False)
-def cached_weather(identity, descriptor, filters, _reader):
-    return _reader.weather(descriptor, filters)
+def cached_weather(identity, descriptor, filters, details, _reader):
+    return _reader.weather(descriptor, filters, details=details)
 
 
 class Reader:
@@ -73,386 +94,714 @@ class Reader:
 
     def secondary(self, descriptor, filters):
         return query_secondary(
+            self.connection, descriptor, filters, development=descriptor.get("development", False)
+        )
+
+    def weather(self, descriptor, filters, *, details=True):
+        return query_weather(
             self.connection,
             descriptor,
             filters,
             development=descriptor.get("development", False),
+            details=details,
         )
 
-    def weather(self, descriptor, filters):
-        return query_weather(
-            self.connection, descriptor, filters, development=descriptor.get("development", False)
+
+def table(rows):
+    if rows:
+        configs = {}
+        for key in rows[0]:
+            if any(isinstance(r.get(key), str) for r in rows):
+                continue
+            if key in (
+                "On-time",
+                "Cancelled",
+                "Diverted",
+                "Departure delayed",
+                "Minute share",
+                "Affected flights",
+                "Share",
+                "Coverage",
+                "Largest date",
+                "Current",
+                "Prior year",
+            ):
+                configs[key] = st.column_config.NumberColumn(format="%.1f%%")
+            elif key in (
+                "Scheduled",
+                "Arrival eligible",
+                "Departure eligible",
+                "Signed eligible",
+                "Reported minutes",
+                "Cancelled rows",
+                "Flights",
+                "Matched",
+                "Unmatched",
+                "Current eligible",
+                "Prior eligible",
+                "Eligible",
+                "Excluded",
+            ):
+                configs[key] = st.column_config.NumberColumn(format="%,d")
+            elif key in ("Median min", "p90 min"):
+                configs[key] = st.column_config.NumberColumn(format="%.1f")
+            elif key == "Change (pp)":
+                configs[key] = st.column_config.NumberColumn(format="%.2f")
+        st.dataframe(rows, hide_index=True, width="stretch", column_config=configs)
+    else:
+        st.info("No observations for this selection. N/A is not zero performance.")
+
+
+def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
+    if not rows or not any(r.get(value) is not None for r in rows):
+        st.info("No eligible observations to chart.")
+        return
+    frame = pd.DataFrame(rows)
+    frame[value] = pd.to_numeric(frame[value], errors="coerce")
+    category = alt.X if not horizontal else alt.Y
+    measure = alt.Y if not horizontal else alt.X
+    chart = (
+        alt.Chart(frame)
+        .mark_bar(color="#167D8D")
+        .encode(
+            **{
+                "y" if horizontal else "x": category(
+                    f"{label}:N",
+                    sort=order or list(frame[label]),
+                    title=None,
+                    axis=alt.Axis(labelOverlap=False, labelLimit=240) if horizontal else alt.Axis(),
+                ),
+                "x" if horizontal else "y": measure(
+                    f"{value}:Q", title=value, axis=alt.Axis(format=".0%" if rate else "~s")
+                ),
+            },
+            tooltip=[
+                alt.Tooltip(f"{label}:N"),
+                alt.Tooltip(f"{value}:Q", format=".1%" if rate else ",.1f"),
+            ],
         )
+        .properties(height=max(180, len(rows) * 32) if horizontal else 270)
+    )
+    st.altair_chart(chart, width="stretch")
+
+
+def comparison(rows, group, summary, minimum):
+    st.subheader(
+        "Compare "
+        + {"carrier": "carriers", "airport": "origin airports", "route": "directional routes"}.get(
+            group, group
+        )
+    )
+    metric = st.selectbox(
+        "Comparison metric",
+        list(RATES),
+        key=f"metric_{group}",
+        index=3 if group == "airport" else 0,
+    )
+    field, denominator = RATES[metric]
+    temporal = group in ("month", "weekday", "hour")
+    count = 36 if temporal else st.slider("Groups to plot", 5, 30, 10, key=f"top_{group}")
+    ordered = ordered_rows(rows, group)
+    eligible = [r for r in ordered if r[denominator] >= minimum]
+    selected = ordered if temporal else eligible[:count]
+    if not temporal:
+        shown = sum(int(r["SCHEDULED_ROWS"]) for r in selected)
+        total = int(summary["SCHEDULED_ROWS"])
+        st.caption(
+            f"Largest {len(selected)} qualifying groups by scheduled volume, not best/worst. "
+            f"Plotted schedules: {shown:,} / {total:,} ({shown / total:.1%})."
+            if total
+            else "No schedules."
+        )
+        if group in ("route", "airport"):
+            st.caption(
+                "Detail is capped at the 500 largest groups by volume; "
+                "this is not a whole-network performance ranking."
+            )
+    st.caption(
+        f"Chart requires ≥{minimum:,} observations in the selected metric's denominator. "
+        f"{len(rows) - len(eligible)} returned groups below support remain in detail."
+    )
+    plot(
+        [
+            {
+                "Group": group_label(r, group),
+                metric: r[field] if r[denominator] >= minimum else None,
+            }
+            for r in selected
+        ],
+        "Group",
+        metric,
+        horizontal=not temporal,
+        rate=True,
+    )
+    compact = comparison_table(selected, group)
+    # Deliberate primary columns: trade-offs together, support and quantiles nearby.
+    primary = ["Group", "On-time", "Cancelled", "Diverted", "Scheduled", "p90 min"]
+    if group == "airport":
+        metric_column = {
+            "Arrival on-time": "On-time",
+            "Cancellation": "Cancelled",
+            "Diversion": "Diverted",
+            "Departure delay ≥15 min": "Departure delayed",
+        }[metric]
+        support_column = {
+            "ARRIVAL_DENOMINATOR": "Arrival eligible",
+            "SCHEDULED_ROWS": "Scheduled",
+            "DEPARTURE_DENOMINATOR": "Departure eligible",
+        }[denominator]
+        primary = list(
+            dict.fromkeys(
+                ["Group", metric_column, support_column, "Cancelled", "Scheduled", "p90 min"]
+            )
+        )
+    table([{k: r[k] for k in primary} for r in compact])
+    with st.expander("All returned groups · eligibility and signed-delay summaries"):
+        table(comparison_table(rows, group))
+        st.caption(
+            "Arrival rate excludes cancelled/diverted and unknown indicators. "
+            "Signed median/p90 use eligible signed delays, not subgroup quantile averages. "
+            "Unadjusted network/schedule mix differs."
+        )
+
+
+def disruption(data, minimum):
+    s = data["summary"]
+    st.subheader("Reported delay categories")
+    st.write(
+        f"Late ordinary arrivals: {number(s['CATEGORY_ELIGIBLE'])}; complete allocations: "
+        f"{number(s['CATEGORY_COMPLETE'])}; missing: {number(s['MISSING_CATEGORY_ROWS'])}."
+    )
+    categories = [
+        {
+            "Category": "National Airspace System (NAS)"
+            if r["CATEGORY"] == "NAS"
+            else r["CATEGORY"],
+            "Minute share": r["MINUTE_SHARE"],
+            "Minutes": r["REPORTED_MINUTES"],
+            "Affected": r["AFFECTED_RATE"],
+        }
+        for r in data["categories"]
+    ]
+    categories.sort(key=lambda r: float(r["Minute share"] or 0), reverse=True)
+    plot(categories, "Category", "Minute share", rate=True)
+    table(
+        [
+            {
+                "Category": r["Category"],
+                "Reported minutes": r["Minutes"],
+                "Minute share": percent_value(r["Minute share"]),
+                "Affected flights": percent_value(r["Affected"]),
+            }
+            for r in categories
+        ]
+    )
+    st.caption(
+        "Minute share divides by all reported category minutes on complete late-arrival "
+        "allocations. Affected % divides by complete late arrivals; categories overlap "
+        "and need not sum to 100%. Reported attributions are not proven causes. "
+        "Weather is not all weather-associated disruption."
+    )
+    with st.expander("Allocation quality and exclusions"):
+        st.write(
+            "Excluded arrival-delay minutes on incomplete rows: "
+            f"{number(s['EXCLUDED_ARRIVAL_MINUTES'])}; "
+            f"allocation mismatches: {number(s['ALLOCATION_MISMATCH_ROWS'])}."
+        )
+        st.write("Cancelled/diverted and unknown arrival indicators are excluded.")
+    if s["UNALLOCATED_MINUTES"]:
+        st.warning(
+            f"Unallocated arrival-delay minutes: {number(s['UNALLOCATED_MINUTES'])}; "
+            "preserved, not repaired."
+        )
+    st.subheader("Cancellation reasons")
+    st.caption(
+        "Separate population: cancelled rows only, not late-arrival minutes. "
+        "Unknown reasons retained."
+    )
+    reasons = [
+        {
+            "Reason": r["CANCELLATION_REASON"].replace("NAS", "National Airspace System (NAS)"),
+            "Cancelled rows": r["CANCELLED_ROWS"],
+            "Share": percent_value(r["CANCELLED_SHARE"]),
+        }
+        for r in data["cancellations"]
+    ]
+    table(reasons)
+    st.subheader("Schedule-relative recovery")
+    st.metric("Late departures arriving below 15 minutes late", percent(s["RECOVERY_SHARE"]))
+    st.write(
+        f"Eligible late departures: {number(s['RECOVERY_ELIGIBLE'])}; "
+        f"recovered: {number(s['RECOVERED'])}."
+    )
+    st.write(
+        "Signed improvement (departure delay − arrival delay): "
+        f"mean {number(s['IMPROVEMENT_MEAN'], ' min', 1)}, "
+        f"median {number(s['IMPROVEMENT_MEDIAN'], ' min', 1)}, "
+        f"p90 {number(s['IMPROVEMENT_P90'], ' min', 1)}."
+    )
+    bands = sorted(data["distribution"], key=lambda r: RECOVERY_ORDER.index(r["RECOVERY_BAND"]))
+    distribution = [
+        {
+            "Improvement band": r["RECOVERY_BAND"],
+            "Share": float(r["ELIGIBLE_ROWS"]) / s["RECOVERY_ELIGIBLE"]
+            if s["RECOVERY_ELIGIBLE"]
+            else None,
+            "Flights": r["ELIGIBLE_ROWS"],
+        }
+        for r in bands
+    ]
+    plot(distribution, "Improvement band", "Share", rate=True)
+    table([{**r, "Share": percent_value(r["Share"])} for r in distribution])
+    st.caption(
+        "Ordinary noncancelled/nondiverted completions departing ≥15 min late with both "
+        "signed delays known. Negative/zero improvement retained. Positive improvement "
+        "is not proof of faster flying or a causal intervention."
+    )
+    st.write(
+        "Missing arrival delay among ordinary late departures: "
+        f"{number(s.get('RECOVERY_MISSING_ARRIVAL'))}. "
+        "Missing departure delay among ordinary completions: "
+        f"{number(s.get('RECOVERY_MISSING_DEPARTURE'))}. "
+        "These diagnostics are distinct from scheduled rows that simply did not depart late."
+    )
+    if 0 < s["CATEGORY_COMPLETE"] < minimum or 0 < s["RECOVERY_ELIGIBLE"] < minimum:
+        st.warning("A secondary subset is below the sample-size threshold; inspect support.")
+
+
+def weather_view(data, minimum):
+    st.caption(
+        "Fixed DEN-origin, Denver-local January 2025 pilot, including cancellations/diversions. "
+        "Latest accepted observation at/before scheduled departure, age ≤60 min. "
+        "Variables may match different times."
+    )
+    variable = st.selectbox(
+        "Weather variable",
+        ["temperature", "wind", "visibility"],
+        format_func=lambda x: {
+            "temperature": "Temperature (°C)",
+            "wind": "Wind (m/s)",
+            "visibility": "Visibility (m)",
+        }[x],
+    )
+    rows = [r for r in data["comparisons"] if r["VARIABLE"] == variable]
+    bands = WEATHER_BANDS[variable]
+    rows.sort(key=lambda r: bands.index(r["BAND"]) if r["BAND"] in bands else len(bands))
+    if not rows:
+        st.info("No DEN pilot rows match these filters; national weather is not available.")
+    display = []
+    for r in rows:
+        dates, schedules, departures = weather_support(r, minimum)
+        display.append(
+            {
+                "Band": r["BAND"],
+                "Departure delayed": percent_value(r["DEPARTURE_DELAY_RATE"]),
+                "Cancelled": percent_value(r["CANCELLATION_RATE"]),
+                "Scheduled": r["SCHEDULED_ROWS"],
+                "Departure eligible": r["DEPARTURE_DENOMINATOR"],
+                "Dates": r["LOCAL_DATES"],
+                "Largest date": percent_value(r["LARGEST_DATE_SHARE"]),
+                "Support": "Limited"
+                if not all((dates, schedules, departures))
+                else "Thresholds met",
+            }
+        )
+    table(display)
+    if any(not all(weather_support(r, minimum)) for r in rows):
+        st.warning(
+            f"Some bands have fewer than five local dates or fewer than {minimum:,} "
+            "scheduled / departure-eligible observations. Support is metric-specific, "
+            "not a performance ranking."
+        )
+    st.caption(
+        "Inspect dates and largest-date share: flights sharing a date/episode are not "
+        "independent weather events. Thresholds do not establish statistical independence "
+        "or control traffic mix. Unmatched conditions are not benign. Cancellation selection "
+        "and carrier/route/hour mix confound comparisons. Scheduled weather does not establish "
+        "cancellation-decision conditions or causality. No compound conditions."
+    )
+    st.subheader("Filtered coverage · matched and missing observations")
+    coverage = [r for r in data["selected_coverage"] if r["VARIABLE"] == variable]
+    table(
+        [
+            {
+                "Flight status": "Cancelled" if r["CANCELLED"] else "Not cancelled",
+                "Scheduled": r["SCHEDULED_ROWS"],
+                "Matched": r["MATCHED_ROWS"],
+                "Coverage": percent_value(r["COVERAGE"]),
+                "Unmatched": r["SCHEDULED_ROWS"] - r["MATCHED_ROWS"],
+            }
+            for r in coverage
+        ]
+    )
+    if data["pilot_coverage"]:
+        with st.expander("Full pilot qualification · unaffected by flight filters"):
+            table(data["pilot_coverage"])
+        with st.expander("Daily coverage and match-quality diagnostics"):
+            table([r for r in data["daily"] if r["VARIABLE"] == variable])
+            table(coverage)
 
 
 def render(reader):
-    import pandas as pd
-    import streamlit as st
-
-    from airline_warehouse.analytics import Filters, cache_identity
-    from airline_warehouse.dashboard import (
-        cached_metrics,
-        cached_options,
-        cached_secondary,
-        cached_weather,
+    st.markdown(
+        """<style>
+    [data-testid="stMetricValue"] {font-size:1.8rem; white-space:normal; overflow:visible}
+    [data-testid="stMetricLabel"] p {white-space:normal; overflow:visible}
+    @media (max-width:1100px) { [data-testid="stHorizontalBlock"] {flex-wrap:wrap}
+      [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]
+      {min-width:210px; flex:1 1 210px} }
+    </style>""",
+        unsafe_allow_html=True,
     )
-    from airline_warehouse.warehouse import BASELINE_MONTHS
-
-    st.caption("FLIGHT OPERATIONS · SOURCE-RECONCILED ANALYTICS")
     st.title("Airline Delay Intelligence")
-    st.write("A clearer view of on-time performance, disruption and recovery.")
+    st.caption(
+        "Historical airline & network reliability · descriptive, not causal · "
+        "source rows, not passengers"
+    )
     try:
-        descriptor = reader.pin()  # exactly one descriptor, reused throughout this render
+        descriptor = reader.pin()
         reader.validate(descriptor)
         options = cached_options(
             (
-                "DC50202",
                 descriptor.get("target"),
                 descriptor["schema"],
                 descriptor["processing_contract"],
+                descriptor.get("release_id"),
             ),
             descriptor,
             reader,
         )
     except Exception:
-        st.info(
-            "Unavailable: no readable validated release. "
-            "Complete bootstrap or explicitly select development mode."
-        )
+        st.error("Unavailable: no readable validated release. No privileged fallback.")
         st.stop()
     if descriptor.get("development"):
         st.warning("DEVELOPMENT — UNPUBLISHED. Not a validated immutable release.")
-    else:
-        complete = set(descriptor["inputs"]) == BASELINE_MONTHS
-        st.caption(
-            "Validated 2023–2025 baseline; cloud/platform final acceptance remains separate."
-            if complete
-            else f"Validated partial baseline ({len(descriptor['inputs'])} selected month(s)); "
-            "not final 36-month project acceptance."
-        )
-    st.caption(
-        f"Coverage: {options['start']} to {options['end']}; "
-        "marketing-table source rows, not passengers."
-    )
-    st.caption(
-        "Processed: "
-        + str(descriptor.get("built_at"))
-        + "; release: "
-        + str(descriptor.get("release_id", "none (development)"))
-        + "; published: "
-        + str(descriptor.get("published_at", "not published"))
-    )
+    defaults = {
+        "dates": (options["start"], options["end"]),
+        "carriers": [],
+        "origin": None,
+        "destination": None,
+        "minimum": 100,
+        "period": "All years",
+        "group": "month",
+    }
 
     def reset():
-        for key in ("dates", "carriers", "origin", "destination", "minimum", "group"):
-            st.session_state.pop(key, None)
+        for key, value in defaults.items():
+            st.session_state[key] = value
+
+    def period_change():
+        p = st.session_state.period
+        if p == "All years":
+            st.session_state.dates = defaults["dates"]
+        elif p != "Custom":
+            if "-" in p:
+                import calendar
+
+                year, month = map(int, p.split("-"))
+                st.session_state.dates = (
+                    max(options["start"], dt.date(year, month, 1)),
+                    min(options["end"], dt.date(year, month, calendar.monthrange(year, month)[1])),
+                )
+                return
+            year = int(p)
+            st.session_state.dates = (
+                max(options["start"], dt.date(year, 1, 1)),
+                min(options["end"], dt.date(year, 12, 31)),
+            )
+
+    def swap():
+        st.session_state.origin, st.session_state.destination = (
+            st.session_state.destination,
+            st.session_state.origin,
+        )
+
+    def pilot():
+        st.session_state.dates = (dt.date(2025, 1, 1), dt.date(2025, 1, 31))
+        st.session_state.origin = 11292
+        st.session_state.destination = None
+        st.session_state.carriers = []
+        st.session_state.period = "2025-01"
+
+    def custom_dates():
+        st.session_state.period = "Custom"
+
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+    carriers, airports = dict(options["carriers"]), dict(options["airports"])
+
+    def label(v):
+        return "All" if v is None else airports[v]
 
     with st.sidebar:
-        st.subheader("Your flight view")
-        st.caption("Explore a consistent, release-pinned slice of the source data.")
+        task = st.radio("Investigation", TASKS, key="task")
         st.button("Reset filters", key="reset", on_click=reset)
+        st.selectbox(
+            "Period preset",
+            [
+                "All years",
+                "Custom",
+                *[str(y) for y in range(options["start"].year, options["end"].year + 1)],
+                *[str(d)[:7] for d in pd.date_range(options["start"], options["end"], freq="MS")],
+            ],
+            key="period",
+            on_change=period_change,
+        )
         dates = st.date_input(
             "Source dates",
-            (options["start"], options["end"]),
             min_value=options["start"],
             max_value=options["end"],
             key="dates",
+            on_change=custom_dates,
         )
-        carriers = dict(options["carriers"])
         chosen = st.multiselect(
-            "Marketing carrier (stable DOT ID)",
-            list(carriers),
-            key="carriers",
-            format_func=lambda v: f"{carriers[v]} ({v})",
+            "Marketing carrier", list(carriers), key="carriers", format_func=lambda v: carriers[v]
         )
-        airports = dict(options["airports"])
-
-        def label(v):
-            return "All" if v is None else f"{airports[v]} ({v})"
-
-        origin = st.selectbox("Origin", [None, *airports], format_func=label, key="origin")
+        origin = st.selectbox(
+            "Origin", [None, *airports], format_func=label, key="origin", placeholder="All origins"
+        )
         destination = st.selectbox(
-            "Destination", [None, *airports], format_func=label, key="destination"
+            "Destination",
+            [None, *airports],
+            format_func=label,
+            key="destination",
+            placeholder="All destinations",
         )
+        st.button("Reverse route", on_click=swap, disabled=origin is None or destination is None)
         minimum = st.number_input(
-            "Ranking minimum eligible observations",
-            min_value=1,
-            max_value=1_000_000,
-            value=100,
-            step=1,
-            key="minimum",
+            "Chart minimum observations", min_value=1, max_value=1_000_000, step=1, key="minimum"
         )
-        group = st.selectbox(
-            "Analysis", ["carrier", "month", "weekday", "hour", "airport", "route"], key="group"
+        if task == TASKS[3]:
+            st.button("Use DEN · January 2025", on_click=pilot)
+        st.caption(
+            "Changes apply immediately. Presets set dates; custom dates are authoritative. "
+            "Comparisons are unadjusted for network and schedule mix."
         )
     if len(dates) != 2:
         st.info("Select both dates before querying.")
         st.stop()
     filters = Filters(dates[0], dates[1], tuple(chosen), origin, destination)
+    st.header(task)
     st.caption(
-        f"Applied: {dates[0]}–{dates[1]}; carriers {chosen or 'all'}; "
-        f"ordered route {label(origin)} → {label(destination)}; minimum {minimum}."
+        f"Applied: {dates[0]}–{dates[1]} · "
+        f"{', '.join(carriers[c] for c in chosen) or 'All carriers'} · "
+        f"{label(origin)} → {label(destination)}"
     )
-    try:
-        reader.validate(descriptor)  # also checked before cache hits; no expired-token fallback
-        summary = cached_metrics(
-            cache_identity(descriptor, filters, "all", minimum, 500),
+    if task == TASKS[3]:
+        st.info(
+            "Weather pilot scope: DEN departures, January 2025 only. "
+            "Carrier, destination and dates within that month may narrow the pilot."
+        )
+        if not weather_scope(filters):
+            st.warning(
+                "Your flight filters are outside the weather pilot. "
+                "No national KPIs or mixed-population weather results are shown."
+            )
+            st.button("Align filters to DEN · January 2025", on_click=pilot, type="primary")
+            st.stop()
+
+    def metrics(f=filters, group="all"):
+        reader.validate(descriptor)  # validate even before cache hits; same pinned release
+        return cached_metrics(
+            cache_identity(descriptor, f, group, minimum, 500),
             descriptor,
-            filters,
-            "all",
-            minimum,
-            reader,
-        )[0]
-        reader.validate(descriptor)
-        detail = cached_metrics(
-            cache_identity(descriptor, filters, group, minimum, 500),
-            descriptor,
-            filters,
+            f,
             group,
             minimum,
             reader,
         )
+
+    try:
+        summary = metrics()[0]
+        for col, (name, (field, denominator)) in zip(st.columns(4), RATES.items(), strict=True):
+            col.metric(
+                name,
+                percent(summary[field]),
+                help=f"Eligible observations: {number(summary[denominator])}",
+                border=True,
+            )
+        st.write(
+            f"Scheduled source rows: **{number(summary['SCHEDULED_ROWS'])}** · "
+            f"Arrival eligible: {number(summary['ARRIVAL_DENOMINATOR'])} · "
+            f"Departure eligible: {number(summary['DEPARTURE_DENOMINATOR'])}"
+        )
+        st.caption(
+            "On-time: <15 min among eligible ordinary arrivals; cancellations/diversions "
+            "excluded. Cancellation/diversion rates use all schedules; "
+            "departure delay includes eligible diversions."
+        )
+        if not summary["SCHEDULED_ROWS"]:
+            st.info(
+                "No observations match these filters. "
+                "Zero denominators are N/A, not zero performance."
+            )
+        st.caption(
+            f"Signed arrival delay · median {number(summary['SIGNED_MEDIAN'], ' min', 1)} · "
+            f"mean {number(summary['SIGNED_MEAN'], ' min', 1)} · "
+            f"exact p90 {number(summary['SIGNED_P90'], ' min', 1)}. Early arrivals stay negative."
+        )
+        if task == TASKS[0]:
+            comparison(metrics(group="carrier"), "carrier", summary, minimum)
+            st.subheader("Monthly reliability context")
+            monthly = metrics(group="month")
+            metric = st.selectbox("Trend metric", list(RATES), key="network_trend")
+            field, den = RATES[metric]
+            plot(
+                [
+                    {
+                        "Month": group_label(r, "month"),
+                        metric: r[field] if r[den] >= minimum else None,
+                    }
+                    for r in ordered_rows(monthly, "month")
+                ],
+                "Month",
+                metric,
+                horizontal=False,
+                rate=True,
+            )
+            st.caption(
+                "Monthly rates use their own eligible counts. "
+                "Missing/unsupported periods are not zero. "
+                "Use Time & routes for equivalent-period comparisons."
+            )
+        elif task == TASKS[1]:
+            group = st.selectbox(
+                "Explore by", ["month", "weekday", "hour", "route", "airport"], key="group"
+            )
+            comparison(metrics(group=group), group, summary, minimum)
+            st.caption(
+                "Local scheduled hours, not actual/UTC departures. Source 2400 remains "
+                "a separate bucket, not a next-day conversion. A→B differs from B→A."
+            )
+            if origin is not None and destination is not None:
+                st.subheader("Both route directions · same period & carriers")
+                reverse = metrics(replace(filters, origin=destination, destination=origin))[0]
+                table(
+                    comparison_table(
+                        [
+                            {
+                                **summary,
+                                "ORIGIN_LABEL": label(origin),
+                                "DESTINATION_LABEL": label(destination),
+                            },
+                            {
+                                **reverse,
+                                "ORIGIN_LABEL": label(destination),
+                                "DESTINATION_LABEL": label(origin),
+                            },
+                        ],
+                        "route",
+                    )
+                )
+            previous = prior_year(filters, options["start"], options["end"])
+            compare = st.checkbox(
+                "Compare with same calendar dates last year", disabled=previous is None
+            )
+            if compare and previous is not None:
+                reference = metrics(previous)[0]
+                st.subheader("Equivalent-period comparison")
+                st.caption(
+                    f"Current {filters.start}–{filters.end}; "
+                    f"reference {previous.start}–{previous.end}. Same carrier/route filters. "
+                    "Leap day clamps to February 28; period lengths may differ. "
+                    "Traffic mix is not adjusted."
+                )
+                table(
+                    [
+                        {
+                            "Measure": name,
+                            "Current": percent_value(summary[field]),
+                            "Prior year": percent_value(reference[field]),
+                            "Change (pp)": (float(summary[field]) - float(reference[field])) * 100
+                            if summary[field] is not None and reference[field] is not None
+                            else None,
+                            "Current eligible": summary[den],
+                            "Prior eligible": reference[den],
+                        }
+                        for name, (field, den) in RATES.items()
+                    ]
+                )
+            if previous is None:
+                st.caption(
+                    "Choose a period whose full prior-year dates are within released coverage "
+                    "to enable the comparator."
+                )
+        elif task == TASKS[2]:
+            if descriptor.get("analytical_contract") == "secondary-v1" or descriptor.get(
+                "development"
+            ):
+                reader.validate(descriptor)
+                disruption(
+                    cached_secondary(
+                        cache_identity(descriptor, filters, "all", 1, 500),
+                        descriptor,
+                        filters,
+                        reader,
+                    ),
+                    minimum,
+                )
+            else:
+                st.info("This release does not contain secondary analyses.")
+        elif descriptor.get("weather"):
+            details = st.checkbox("Load full-pilot and daily diagnostics", key="weather_details")
+            reader.validate(descriptor)
+            weather_view(
+                cached_weather(
+                    cache_identity(descriptor, filters, "all", 1, 500),
+                    descriptor,
+                    filters,
+                    details,
+                    reader,
+                ),
+                minimum,
+            )
+        else:
+            st.info("This release does not contain the qualified DEN weather pilot.")
     except Exception:
         st.error(
             "Results unavailable or release token expired. "
             "Reload; no partial/new-release fallback was used."
         )
         st.stop()
-    labels = [
-        ("Arrival on-time", "ARRIVAL_RATE"),
-        ("Cancellation", "CANCELLATION_RATE"),
-        ("Diversion", "DIVERSION_RATE"),
-        ("Departure delay ≥15 min", "DEPARTURE_RATE"),
-    ]
-    for col, (name, key) in zip(st.columns(4), labels, strict=True):
-        value = summary[key]
-        col.metric(name, "N/A" if value is None else f"{float(value) * 100:.1f}%", border=True)
-    n = int(summary["SCHEDULED_ROWS"])
-    st.write(f"Scheduled source rows: {n:,}")
-    if not n:
-        st.info(
-            "No observations match these filters. Zero denominators are N/A, not zero performance."
+    with st.expander("Methodology, eligibility & technical provenance"):
+        table(
+            [
+                {
+                    "Measure": name,
+                    "Eligible": summary[den],
+                    "Excluded": summary["SCHEDULED_ROWS"] - summary[den],
+                }
+                for name, (_, den) in RATES.items()
+            ]
         )
-    counts = []
-    for measure, num, den, unknown in (
-        ("Arrival on-time", "ARRIVAL_NUMERATOR", "ARRIVAL_DENOMINATOR", "UNKNOWN_ARRIVAL"),
-        ("Cancellation", "CANCELLATION_NUMERATOR", "SCHEDULED_ROWS", "UNKNOWN_CANCELLED"),
-        ("Diversion", "DIVERSION_NUMERATOR", "SCHEDULED_ROWS", "UNKNOWN_DIVERTED"),
-        ("Departure delay", "DEPARTURE_NUMERATOR", "DEPARTURE_DENOMINATOR", "UNKNOWN_DEPARTURE"),
-    ):
-        counts.append(
+        table(
+            [
+                {
+                    "Unknown arrival indicator": summary["UNKNOWN_ARRIVAL"],
+                    "Unknown departure indicator": summary["UNKNOWN_DEPARTURE"],
+                    "Unknown cancellation flag": summary["UNKNOWN_CANCELLED"],
+                    "Unknown diversion flag": summary["UNKNOWN_DIVERTED"],
+                    "Signed eligible": summary["SIGNED_ARRIVAL_COUNT"],
+                }
+            ]
+        )
+        st.write(
+            "Rates use aggregate numerators/denominators, never averages of subgroup rates. "
+            "Exact signed quantiles use eligible flight values. Marketing-table source rows "
+            "are not passengers or distinct journeys. Stable IDs and original source labels "
+            "remain on facts. Descriptive differences do not establish causation "
+            "or fairness-adjusted rankings."
+        )
+        st.json(
             {
-                "Measure": measure,
-                "Numerator": summary[num],
-                "Eligible denominator": summary[den],
-                "Excluded": n - int(summary[den]),
-                "Unknown indicator/flag": summary[unknown],
+                k: str(descriptor.get(k))
+                for k in ("release_id", "built_at", "published_at", "processing_contract")
             }
         )
-    st.dataframe(counts, hide_index=True)
-    st.subheader("How late—or early—do flights arrive?")
-    st.write("Signed ordinary-arrival delay (minutes); early arrivals remain negative.")
-    for col, (name, key) in zip(
-        st.columns(3),
-        [("Mean", "SIGNED_MEAN"), ("Median", "SIGNED_MEDIAN"), ("Exact p90", "SIGNED_P90")],
-        strict=True,
-    ):
-        col.metric(name, "N/A" if summary[key] is None else f"{float(summary[key]):.1f}")
-    st.caption(
-        f"Signed-delay eligible count: {summary['SIGNED_ARRIVAL_COUNT']}; "
-        "may differ from indicator eligibility."
-    )
-    if detail:
-        st.subheader("Compare the selected flight groups")
-        frame = pd.DataFrame(detail)
-        st.dataframe(frame, hide_index=True)
         st.caption(
-            "Up to 500 groups, ordered by volume—not a performance ranking. "
-            "Narrow filters for sparse groups."
-        )
-        metric = "DEPARTURE_RATE" if group == "airport" else "ARRIVAL_RATE"
-        eligible = "DEPARTURE_RANKABLE" if group == "airport" else "ARRIVAL_RANKABLE"
-        chart = frame[frame[eligible].fillna(False)]
-        suppressed = len(frame) - len(chart)
-        if suppressed:
-            st.warning(
-                f"{suppressed} groups are below this metric's eligible-count threshold. "
-                "They remain in detail but are excluded from the comparison chart."
-            )
-        if chart.empty:
-            st.warning(
-                "No groups meet this metric's ranking threshold; detail remains inspectable."
-            )
-        else:
-
-            def group_label(row):
-                if group == "carrier":
-                    return f"{row['MARKETING_LABEL']} ({row['MARKETING_CARRIER_ID']})"
-                if group == "airport":
-                    return f"{row['ORIGIN_LABEL']} ({row['ORIGIN_ID']})"
-                if group == "route":
-                    return (
-                        f"{row['ORIGIN_LABEL']} ({row['ORIGIN_ID']}) → "
-                        f"{row['DESTINATION_LABEL']} ({row['DESTINATION_ID']})"
-                    )
-                field = {
-                    "month": "MONTH_START",
-                    "weekday": "WEEKDAY",
-                    "hour": "SCHEDULED_LOCAL_HOUR",
-                }[group]
-                if group == "hour" and row[field] == 24:
-                    return "Source 2400 midnight (date not inferred)"
-                return str(row[field])
-
-            chart = chart.copy()
-            chart["Group"] = chart.apply(group_label, axis=1)
-            st.bar_chart(chart.set_index("Group")[metric].astype(float))
-            st.caption(
-                "Rates shown on a 0–1 scale; chart membership uses metric-specific eligibility."
-            )
-    st.caption(
-        "Local scheduled hours—not actual departure/UTC cohorts. A→B differs from B→A. "
-        "Source clock 2400 is a separate midnight bucket, "
-        "not a 24th hour or a next-day conversion; "
-        "source reporting dates stay unchanged. "
-        "Descriptive comparisons reflect carrier, route and schedule mix; "
-        "no causality or fairness adjustment."
-    )
-    st.subheader("DEN investigation — scheduled weather context")
-    if descriptor.get("weather"):
-        try:
-            reader.validate(descriptor)
-            weather = cached_weather(
-                cache_identity(descriptor, filters, "all", minimum, 500),
-                descriptor,
-                filters,
-                reader,
-            )
-        except Exception:
-            st.error("Weather results unavailable. Reload; no partial-release fallback was used.")
-            st.stop()
-        st.caption(
-            "Fixed DEN-origin, Denver-local January 2025 only, including cancellations/diversions. "
-            "Latest independently accepted observation at/before scheduled departure, age ≤60 min. "
-            "Temperature °C; wind m/s; visibility m. Each variable may use a different time."
-        )
-        st.write(
-            "Complete pilot coverage — all scheduled pilot rows, unaffected by sidebar filters"
-        )
-        st.dataframe(weather["pilot_coverage"], hide_index=True)
-        st.write(
-            "Filtered DEN context — sidebar dates, carrier and directional-route filters apply"
-        )
-        st.dataframe(weather["selected_coverage"], hide_index=True)
-        comparisons = weather["comparisons"]
-        if comparisons:
-            st.dataframe(comparisons, hide_index=True)
-            if any(r["LOCAL_DATES"] < 5 or r["SCHEDULED_ROWS"] < minimum for r in comparisons):
-                st.warning(
-                    "Some weather groups have fewer than five local dates or the eligible-count "
-                    "threshold. Inspect support; they are not performance rankings."
-                )
-        else:
-            st.info("No DEN pilot rows match these filters; national weather is not available.")
-        with st.expander("Weather daily coverage and episode concentration"):
-            st.dataframe(weather["daily"], hide_index=True)
-        st.caption(
-            "Largest-date share shows episode concentration: flights on a shared date/episode "
-            "are not independent weather events. Unmatched rows remain visible, not benign. "
-            "Carrier/route/hour mix and cancellation selection confound comparisons. "
-            "Scheduled conditions do not establish conditions at a cancellation decision, "
-            "real-time availability, or that weather caused disruption. No compound conditions."
-        )
-    else:
-        st.info("This release does not yet contain the qualified DEN/local-January weather pilot.")
-    # Old descriptors remain readable but do not pretend to contain new model fields.
-    if descriptor.get("analytical_contract") == "secondary-v1" or descriptor.get("development"):
-        try:
-            reader.validate(descriptor)
-            secondary = cached_secondary(
-                cache_identity(descriptor, filters, "all", minimum, 500),
-                descriptor,
-                filters,
-                reader,
-            )
-        except Exception:
-            st.error("Secondary results unavailable. Reload; no release fallback was used.")
-            st.stop()
-        s = secondary["summary"]
-        st.subheader("Reported delay categories")
-        st.write(
-            f"Late ordinary arrivals: {s['CATEGORY_ELIGIBLE']}; complete five-category subset: "
-            f"{s['CATEGORY_COMPLETE']}; missing allocations: {s['MISSING_CATEGORY_ROWS']}. "
-            "Cancelled/diverted rows and unknown arrival indicators are excluded."
-        )
-        st.write(
-            "Excluded arrival-delay minutes on incomplete allocation rows: "
-            + (
-                "N/A (no known minutes)"
-                if s["EXCLUDED_ARRIVAL_MINUTES"] is None
-                else str(s["EXCLUDED_ARRIVAL_MINUTES"])
-            )
-            + f"; complete-subset allocation mismatches: {s['ALLOCATION_MISMATCH_ROWS']}."
-        )
-        if 0 < int(s["CATEGORY_COMPLETE"]) < minimum:
-            st.warning(
-                "Category subset is below the displayed sample-size threshold; inspect with care."
-            )
-        st.caption(
-            "Minute share = category minutes / all reported category minutes on the complete "
-            "late-arrival subset—not a share of all arrival-delay minutes. Affected rate = "
-            "positive allocations / complete late arrivals. Categories overlap; rates need not "
-            "sum to 100%. These are reported attributions, not proven causes; Weather is not "
-            "every weather-associated disruption."
-        )
-        if s["UNALLOCATED_MINUTES"]:
-            st.warning(f"Unallocated arrival-delay minutes: {s['UNALLOCATED_MINUTES']}; preserved.")
-        st.dataframe(secondary["categories"], hide_index=True)
-        st.write(
-            "Cancellation reasons — counts and shares of cancelled rows only; unknowns retained."
-        )
-        st.dataframe(secondary["cancellations"], hide_index=True)
-        st.subheader("Schedule-relative recovery")
-        if 0 < int(s["RECOVERY_ELIGIBLE"]) < minimum:
-            st.warning(
-                "Recovery subset is below the displayed sample-size threshold; inspect with care."
-            )
-        st.write(
-            f"Eligible late departures: {s['RECOVERY_ELIGIBLE']}; "
-            f"excluded scheduled rows: {int(s['SCHEDULED_ROWS']) - int(s['RECOVERY_ELIGIBLE'])}; "
-            f"arrived below 15 minutes late: {s['RECOVERED']}."
-        )
-        value = s["RECOVERY_SHARE"]
-        st.metric(
-            "Recovered below 15 minutes / eligible late departures",
-            "N/A" if value is None else f"{float(value):.1%}",
-        )
-        for col, (label, field) in zip(
-            st.columns(3),
-            (
-                ("Mean improvement", "IMPROVEMENT_MEAN"),
-                ("Median improvement", "IMPROVEMENT_MEDIAN"),
-                ("Exact p90 improvement", "IMPROVEMENT_P90"),
-            ),
-            strict=True,
-        ):
-            value = s[field]
-            col.metric(label, "N/A" if value is None else f"{float(value):.1f} min")
-        st.dataframe(secondary["distribution"], hide_index=True)
-        st.caption(
-            "Ordinary noncancelled/nondiverted completions departing ≥15 minutes late, "
-            "with both signed delays known. Improvement = departure delay − arrival delay; "
-            "zero/negative values remain. Positive improvement is not proof of faster flying "
-            "or a causal intervention."
-        )
-    with st.expander("Methodology and data quality"):
-        st.write(
-            "Arrival eligibility excludes cancellations/diversions and unknown arrival indicators. "
-            "Departure eligibility excludes cancellations but includes diversions "
-            "with known indicators. Exactly 15 minutes is delayed. Rates use aggregate counts; "
-            "quantiles use eligible values. Unknown cancellation/diversion flags block acceptance. "
-            "Historical source codes/sequence IDs remain on facts; display labels describe "
-            "the selected scope. Weather is a fixed DEN/local-January pilot, not national context."
+            f"Released coverage: {options['start']}–{options['end']}. "
+            "One immutable descriptor per render; no unpublished fallback."
         )
 
 

@@ -1,10 +1,43 @@
 import datetime as dt
 import unittest
 
-from airline_warehouse.analytics import Filters, cache_identity
+from airline_warehouse.analytics import Filters, cache_identity, query_weather
 
 
 class AnalyticalRequestTests(unittest.TestCase):
+    def test_weather_core_does_not_query_collapsed_diagnostics(self):
+        class Connection:
+            description = [("X",)]
+
+            def __init__(self):
+                self.sql = []
+
+            def cursor(self):
+                return self
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def execute(self, sql, parameters):
+                self.sql.append(sql)
+
+            def fetchall(self):
+                return []
+
+        c = Connection()
+        descriptor = {"sealed": True, "schema": "RELEASE_" + "A" * 24, "weather": True}
+        filters = Filters(dt.date(2025, 1, 1), dt.date(2025, 1, 31), origin=11292)
+        core = query_weather(c, descriptor, filters, details=False)
+        self.assertEqual(len(c.sql), 6)
+        self.assertEqual(core["daily"], [])
+        self.assertEqual(core["pilot_coverage"], [])
+        c.sql.clear()
+        query_weather(c, descriptor, filters, details=True)
+        self.assertEqual(len(c.sql), 12)
+
     def test_cache_isolated_by_target_release_every_filter_and_ranking_threshold(self):
         descriptor = {
             "schema": "RELEASE_" + "A" * 24,
