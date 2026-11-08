@@ -37,6 +37,33 @@ def percent_value(value):
     return None if value is None else float(value) * 100
 
 
+def sort_comparisons(rows, group, field, denominator, minimum, order):
+    """Sort displayed comparisons, keeping missing/low-support rates last."""
+    if order == "Most flights":
+        return sorted(rows, key=lambda r: (-r["SCHEDULED_ROWS"], group_label(r, group)))
+    if order == "Name (A–Z)":
+        return sorted(rows, key=lambda r: group_label(r, group))
+
+    def key(row):
+        supported = row[field] is not None and row[denominator] >= minimum
+        value = float(row[field]) if supported else 0
+        return (
+            not supported,
+            -value if order == "Highest rate first" else value,
+            group_label(row, group),
+        )
+
+    return sorted(rows, key=key)
+
+
+def arrival_timing(value):
+    if value is None:
+        return "N/A"
+    if float(value) == 0:
+        return "On schedule"
+    return f"{abs(float(value)):.1f} min {'early' if value < 0 else 'late'}"
+
+
 WEATHER_BANDS = {
     "temperature": ["<−10 °C", "−10–<0 °C", "≥0 °C", "Unmatched"],
     "wind": ["<5 m/s", "5–<10 m/s", "≥10 m/s", "Unmatched"],

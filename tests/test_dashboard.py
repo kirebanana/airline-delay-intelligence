@@ -92,6 +92,41 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_homepage_shows_all_airlines_with_metric_order_and_no_technical_dump(self):
+        class AirlineReader(FixtureReader):
+            def pin(self):
+                return {**super().pin(), "processing_contract": "all-airlines-sort-fixture"}
+
+            def metrics(self, descriptor, filters, group, minimum):
+                base = super().metrics(descriptor, filters, "all", minimum)[0]
+                if group == "carrier":
+                    return [
+                        {
+                            **base,
+                            "MARKETING_LABEL": f"C{i:02}",
+                            "MARKETING_CARRIER_ID": 1000 + i,
+                            "ARRIVAL_RATE": i / 20,
+                            "ARRIVAL_DENOMINATOR": 500,
+                        }
+                        for i in range(11)
+                    ]
+                return [base] if group == "all" else []
+
+        app = AppTest.from_function(render, args=(AirlineReader(),)).run()
+        self.assertFalse(app.error)
+        self.assertEqual(len(app.slider), 0)
+        frame = next(d.value for d in app.dataframe if "Group" in d.value.columns)
+        self.assertEqual(len(frame), 11)
+        self.assertEqual(frame.iloc[0]["Group"], "C10")
+        app.selectbox(key="order_carrier").set_value("Lowest rate first").run()
+        frame = next(d.value for d in app.dataframe if "Group" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Group"], "C00")
+        self.assertEqual(len(app.json), 0)
+        self.assertFalse(any("Signed arrival delay ·" in m.value for m in app.markdown))
+        self.assertTrue(
+            any('[data-testid="stCaptionContainer"] {opacity:1;' in m.value for m in app.markdown)
+        )
+
     def test_secondary_values_sort_numerically_and_threshold_reuses_results(self):
         class NumericReader(FixtureReader):
             calls = 0
@@ -156,25 +191,25 @@ class DashboardTests(unittest.TestCase):
         app = AppTest.from_function(render, args=(WeatherReader(),)).run()
         app.radio(key="task").set_value("DEN weather investigation").run()
         self.assertEqual(len(app.metric), 0)
-        self.assertTrue(any("outside the weather pilot" in w.value for w in app.warning))
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
         app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
-        self.assertTrue(any("five local dates" in w.value for w in app.warning))
+        self.assertTrue(any("five days" in w.value for w in app.warning))
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
-        self.assertTrue(any("outside the weather pilot" in w.value for w in app.warning))
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
 
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
         app.radio(key="task").set_value("Disruption & recovery").run()
         self.assertFalse(app.exception)
         headings = [h.value for h in app.subheader]
-        self.assertIn("Reported delay categories", headings)
-        self.assertIn("Schedule-relative recovery", headings)
-        self.assertTrue(any("1,345" in str(w.value) for w in app.warning))
+        self.assertIn("What types of delay were reported?", headings)
+        self.assertIn("Did flights make up time after a late departure?", headings)
+        self.assertTrue(any("1,345" in str(w.value) for w in app.markdown))
         self.assertTrue(
-            any("20" in str(w.value) and "Excluded" in str(w.value) for w in app.markdown)
+            any("20" in str(w.value) and "not in the chart" in str(w.value) for w in app.markdown)
         )
 
     def test_expired_token_stops_before_cached_results_without_fallback(self):
@@ -190,7 +225,7 @@ class DashboardTests(unittest.TestCase):
         app = AppTest.from_function(render, args=(ExpiredReader(),)).run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
-        self.assertTrue(any("Reload" in message.value for message in app.error))
+        self.assertTrue(any("reload" in message.value.lower() for message in app.error))
 
     def test_filters_empty_and_reset_preserve_explicit_development_scope(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()

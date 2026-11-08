@@ -97,3 +97,22 @@ read explicitly. No further independent-review cycle was run.
 Screenshots/internal review evidence stay in
 ignored workspace scratch storage. No application deployment or data processing
 was performed by this local implementation/validation cycle.
+
+## Owner feedback: plain-language presentation — 2026-11-08
+
+Approved follow-up: simplify wording across all four investigations, improve text
+contrast, and show all airlines with an explicit ordering selector rather than a
+volume-based group-count slider. Airline ordering can use highest/lowest selected
+rate, flight volume or name. Missing/low-support rates remain last when ordering by
+rate and are blank in charts; original numeric results remain inspectable.
+
+Route/airport comparisons still select a bounded busiest set, now with concise
+coverage text and explicit ordering within that set. Time groups retain calendar
+order. KPI definitions move to adjacent help; signed arrival summaries move to an
+optional, plainly explained arrival-delay section. Category, recovery and weather
+copy is rewritten for interpretation without removing population/missing-data or
+causality safeguards. Internal release hashes/contracts are removed from the UI;
+their implementation and documentation remain authoritative outside the dashboard.
+
+Table headers, chart axes and captions use explicit dark text on light backgrounds.
+No metric definitions, released data, infrastructure or publication rules change.

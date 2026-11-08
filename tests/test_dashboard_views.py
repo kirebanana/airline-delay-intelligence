@@ -4,17 +4,50 @@ import unittest
 from airline_warehouse.analytics import Filters
 from airline_warehouse.dashboard_views import (
     WEATHER_BANDS,
+    arrival_timing,
     comparison_table,
     group_label,
     ordered_rows,
     percent_value,
     prior_year,
+    sort_comparisons,
     weather_scope,
     weather_support,
 )
 
 
 class PresentationTests(unittest.TestCase):
+    def test_order_is_metric_based_and_missing_or_small_samples_are_last(self):
+        rows = [
+            {
+                "MARKETING_LABEL": name,
+                "SCHEDULED_ROWS": count,
+                "ARRIVAL_RATE": rate,
+                "ARRIVAL_DENOMINATOR": den,
+            }
+            for name, count, rate, den in [
+                ("AA", 500, 0.5, 500),
+                ("BB", 200, 0.9, 200),
+                ("CC", 2, 1.0, 2),
+                ("DD", 100, None, 0),
+            ]
+        ]
+
+        def order(choice):
+            return [
+                r["MARKETING_LABEL"]
+                for r in sort_comparisons(
+                    rows, "carrier", "ARRIVAL_RATE", "ARRIVAL_DENOMINATOR", 100, choice
+                )
+            ]
+
+        self.assertEqual(order("Highest rate first"), ["BB", "AA", "CC", "DD"])
+        self.assertEqual(order("Lowest rate first"), ["AA", "BB", "CC", "DD"])
+        self.assertEqual(order("Most flights"), ["AA", "BB", "DD", "CC"])
+        self.assertEqual(arrival_timing(-6), "6.0 min early")
+        self.assertEqual(arrival_timing(44), "44.0 min late")
+        self.assertEqual(arrival_timing(None), "N/A")
+
     def test_weather_scope_requires_pilot_origin_and_contained_dates(self):
         base = Filters(dt.date(2025, 1, 1), dt.date(2025, 1, 31))
         from dataclasses import replace

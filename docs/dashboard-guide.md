@@ -9,7 +9,9 @@ publish data. One release descriptor is reused throughout each render.
 
 - **Network & carriers:** begin with all 2023–2025 schedules. Compare on-time,
   cancellation, diversion, scheduled volume and signed p90 delay together. Change
-  the comparison or trend metric; do not infer a universally best carrier from
+  the comparison or trend metric. All airlines in the selection are shown; use
+  **Order by** to choose highest/lowest rate, most flights or alphabetical order.
+  Do not infer a universally best carrier from
   punctuality alone. Networks and schedules differ.
 - **Time & routes:** choose month, weekday, scheduled hour, directional route or
   origin airport. Use the year/month preset and carrier/origin/destination filters.
@@ -38,7 +40,9 @@ all endpoints, the default support threshold and month grouping. Custom dates ar
 authoritative. The applied-scope line identifies the queried population. On narrow
 screens, open or collapse Streamlit's sidebar to access filters or focus on results.
 
-Chart comparisons use metric-specific minimum observations. Route/airport displays
+Chart comparisons use the flights with the information needed for each measure.
+The minimum-flights control can hide small-sample chart values without removing
+their table rows. Route/airport displays
 show a bounded set selected by scheduled volume, with represented schedule share;
 detail is capped at the largest 500 groups. This is not a global best/worst ranking.
 Numeric comparison columns remain sortable; detailed support and signed-delay
@@ -50,6 +54,8 @@ diversions. Signed delays retain early arrivals. Quantiles are computed on eligi
 flight values, never averaged from subgroup quantiles. Source rows do not represent
 passengers or distinct journeys.
 
-Methodology, unknown observations, eligible counts and release provenance remain
-available at the bottom of each investigation. Product acceptance does not waive
+Short definitions are available beside the headline measures. An optional arrival-
+delay section explains typical, average and 90th-percentile delays in plain language.
+Data coverage and missing-data counts are under **About the data and measures**;
+internal release identifiers are not part of the dashboard. Product acceptance does not waive
 the separately documented infrastructure/security limitations.
