@@ -11,6 +11,7 @@ files = [
     root / n for n in ("containers/jobs/Dockerfile", "containers/jobs/requirements.txt", "uv.lock")
 ]
 files += list((root / "src/airline_warehouse").glob("*.py"))
+files += [root / "src/airline_warehouse/airline_names.json"]
 files += list((root / "tests").glob("*.py"))
 files += [root / "sql/07_publication.sql"]
 files += [root / "references/den-weather-pilot.json"]
