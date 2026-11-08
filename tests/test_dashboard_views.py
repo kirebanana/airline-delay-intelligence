@@ -4,6 +4,7 @@ import unittest
 from airline_warehouse.analytics import Filters
 from airline_warehouse.dashboard_views import (
     WEATHER_BANDS,
+    airline_label,
     arrival_timing,
     comparison_table,
     group_label,
@@ -17,6 +18,16 @@ from airline_warehouse.dashboard_views import (
 
 
 class PresentationTests(unittest.TestCase):
+    def test_airline_names_require_matching_stable_id_and_code(self):
+        self.assertEqual(airline_label(19930, "AS"), "Alaska Airlines (AS)")
+        self.assertEqual(airline_label(20368, "G4"), "Allegiant Air (G4)")
+        self.assertEqual(airline_label(99999, "AS"), "AS")
+        self.assertEqual(airline_label(19930, "G4"), "G4")
+        self.assertEqual(
+            group_label({"MARKETING_CARRIER_ID": 19930, "MARKETING_LABEL": "AS"}, "carrier"),
+            "Alaska Airlines (AS)",
+        )
+
     def test_order_is_metric_based_and_missing_or_small_samples_are_last(self):
         rows = [
             {

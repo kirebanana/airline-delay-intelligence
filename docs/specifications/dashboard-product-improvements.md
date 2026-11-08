@@ -116,3 +116,15 @@ their implementation and documentation remain authoritative outside the dashboar
 
 Table headers, chart axes and captions use explicit dark text on light backgrounds.
 No metric definitions, released data, infrastructure or publication rules change.
+
+## Airline labels and duplicate detail — 2026-11-08
+
+Owner-approved follow-up: replace code-only airline labels in charts, hover text,
+filters and tables with names plus codes. Released flight fields contain codes,
+not full names. A small packaged display lookup uses a pinned, checksummed archived
+BTS L_AIRLINE_ID mirror, matched on both stable DOT ID and code for the 2023–2025
+baseline. It is not a live/current carrier registry; unmatched pairs fall back to
+their original source code. No flight identity, metric or warehouse data changes.
+
+Remove the repeated expanded comparison table, retaining the chart and the main
+selected-group table. Route/airport candidate-limit disclosures remain accurate.

@@ -11,6 +11,10 @@ publish data. One release descriptor is reused throughout each render.
   cancellation, diversion, scheduled volume and signed p90 delay together. Change
   the comparison or trend metric. All airlines in the selection are shown; use
   **Order by** to choose highest/lowest rate, most flights or alphabetical order.
+  Names appear alongside codes in the chart, hover text, filter and main table.
+  Display names use a checked BTS lookup snapshot matched on both DOT airline ID
+  and code; unknown combinations retain their source code. The lookup provenance
+  is packaged in `airline_names.json`; it is not a current airline registry.
   Do not infer a universally best carrier from
   punctuality alone. Networks and schedules differ.
 - **Time & routes:** choose month, weekday, scheduled hour, directional route or
@@ -45,8 +49,9 @@ The minimum-flights control can hide small-sample chart values without removing
 their table rows. Route/airport displays
 show a bounded set selected by scheduled volume, with represented schedule share;
 detail is capped at the largest 500 groups. This is not a global best/worst ranking.
-Numeric comparison columns remain sortable; detailed support and signed-delay
-summaries are expandable. Missing/zero-denominator metrics are unavailable, not zero.
+The chart and one main comparison table show the selected groups; there is no
+duplicate expanded comparison table. Numeric columns remain sortable.
+Missing/zero-denominator metrics are unavailable, not zero.
 
 Arrival on-time excludes cancelled/diverted and unknown ordinary-arrival indicators.
 Cancellation/diversion rates use all schedules. Departure delay includes eligible

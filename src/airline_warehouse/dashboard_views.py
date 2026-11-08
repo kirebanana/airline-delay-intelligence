@@ -2,6 +2,9 @@
 
 import calendar
 import datetime as dt
+import json
+from functools import lru_cache
+from importlib.resources import files
 
 TASKS = [
     "Network & carriers",
@@ -79,7 +82,7 @@ def weather_scope(filters):
 
 def group_label(row, group):
     if group == "carrier":
-        return row["MARKETING_LABEL"]
+        return airline_label(row.get("MARKETING_CARRIER_ID"), row["MARKETING_LABEL"])
     if group == "airport":
         return row["ORIGIN_LABEL"]
     if group == "route":
@@ -90,6 +93,18 @@ def group_label(row, group):
         return calendar.day_name[int(row["WEEKDAY"]) - 1]
     hour = int(row["SCHEDULED_LOCAL_HOUR"])
     return "Source 2400" if hour == 24 else f"{hour:02}:00"
+
+
+@lru_cache(maxsize=1)
+def _airline_names():
+    return json.loads(files("airline_warehouse").joinpath("airline_names.json").read_text())[
+        "airlines"
+    ]
+
+
+def airline_label(carrier_id, code):
+    match = _airline_names().get(str(carrier_id))
+    return f"{match['name']} ({code})" if match and match["code"] == code else code
 
 
 def ordered_rows(rows, group):

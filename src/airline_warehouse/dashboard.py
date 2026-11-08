@@ -25,6 +25,7 @@ from airline_warehouse.dashboard_views import (
     RECOVERY_ORDER,
     TASKS,
     WEATHER_BANDS,
+    airline_label,
     arrival_timing,
     comparison_table,
     group_label,
@@ -267,23 +268,24 @@ def comparison(rows, group, summary, minimum):
             with st.expander("Which flights does this comparison cover?"):
                 st.write(
                     "The chart starts with the busiest routes or airports, then orders "
-                    "that set by your chosen measure. Up to 500 are available in the "
-                    "full table. This is not a ranking of every route or airport."
+                    "that set by your chosen measure. Candidates are limited to the 500 "
+                    "busiest groups. Narrow the filters to inspect another route or airport."
                 )
     if len(rows) != len(eligible):
         st.caption(
             f"{len(rows) - len(eligible)} groups have fewer than {minimum:,} flights "
             "with the data needed for this measure; their chart values are left blank."
         )
+    group_title = "Airline" if group == "carrier" else "Group"
     plot(
         [
             {
-                "Group": group_label(r, group),
+                group_title: group_label(r, group),
                 metric: r[field] if r[denominator] >= minimum else None,
             }
             for r in selected
         ],
-        "Group",
+        group_title,
         metric,
         horizontal=not temporal,
         rate=True,
@@ -308,14 +310,7 @@ def comparison(rows, group, summary, minimum):
                 ["Group", metric_column, support_column, "Cancelled", "Scheduled", "p90 min"]
             )
         )
-    table([{k: r[k] for k in primary} for r in compact])
-    with st.expander("Full comparison table and flight counts"):
-        table(comparison_table(rows, group))
-        st.caption(
-            "On-time arrival excludes cancelled and diverted flights. Delay figures keep "
-            "early arrivals negative. Carriers serve different routes and schedules, "
-            "so these comparisons do not isolate the effect of the carrier itself."
-        )
+    table([{group_title if k == "Group" else k: r[k] for k in primary} for r in compact])
 
 
 def disruption(data, minimum):
@@ -623,7 +618,7 @@ def render(reader):
             "Airline",
             list(carriers),
             key="carriers",
-            format_func=lambda v: carriers[v],
+            format_func=lambda v: airline_label(v, carriers[v]),
             help="Marketing airline: the airline under whose code the flight was sold.",
         )
         origin = st.selectbox(
@@ -658,7 +653,7 @@ def render(reader):
     st.header(task)
     st.caption(
         f"Applied: {dates[0]}–{dates[1]} · "
-        f"{', '.join(carriers[c] for c in chosen) or 'All airlines'} · "
+        f"{', '.join(airline_label(c, carriers[c]) for c in chosen) or 'All airlines'} · "
         f"{label(origin)} → {label(destination)}"
     )
     if task == TASKS[3]:
