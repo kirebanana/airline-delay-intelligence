@@ -128,3 +128,21 @@ their original source code. No flight identity, metric or warehouse data changes
 
 Remove the repeated expanded comparison table, retaining the chart and the main
 selected-group table. Route/airport candidate-limit disclosures remain accurate.
+
+## Task discovery and useful detail — 2026-11-08
+
+Owner feedback approved making route analysis directly discoverable and removing
+technical-detail bloat across investigations. Time & routes now opens on routes
+with visible choices for routes, departure hour, weekday, month and airport. A
+selected route displays its two directions once, without a redundant one-route
+ranking. Homepage monthly context remains a quick overview; the time investigation
+adds detailed group comparisons and an optional prior-year comparison.
+
+Remove technical-detail expanders, raw status tables and the weather diagnostic
+toggle. Keep useful delay summaries, definitions in KPI help, weather coverage,
+condition support and actual missing-data issues inline. Weather headline rates
+are explicitly for all selected flights, independent of the chosen weather variable.
+The condition table and short-period warnings explain that one or two selected
+days are not many independent weather events. UI weather reads use core aggregates
+only; detailed query APIs remain available for offline/operational verification.
+No metric definitions, release checks, published data or infrastructure change.

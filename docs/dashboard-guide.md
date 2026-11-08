@@ -17,8 +17,8 @@ publish data. One release descriptor is reused throughout each render.
   is packaged in `airline_names.json`; it is not a current airline registry.
   Do not infer a universally best carrier from
   punctuality alone. Networks and schedules differ.
-- **Time & routes:** choose month, weekday, scheduled hour, directional route or
-  origin airport. Use the year/month preset and carrier/origin/destination filters.
+- **Time & routes:** opens directly on routes. Visible choices switch to departure
+  hour, day of week, month or departure airport. Use year/month and airline/airport filters.
   With both endpoints selected, inspect both directions together or use **Reverse
   route**. A prior-year comparator is available only when the entire reference
   period is within released coverage. Changes are percentage points, not percent
@@ -33,14 +33,17 @@ publish data. One release descriptor is reused throughout each render.
   **Align filters to DEN · January 2025** action explicitly selects the pilot.
   Explore temperature, wind or visibility separately. Inspect departure
   eligibility, cancellations, date support, largest-date concentration and missing
-  matches. Full-pilot and daily diagnostics load only when explicitly requested;
-  changing support thresholds reuses the same analytical aggregates. This is
-  scheduled weather context, not national weather or a causal explanation.
+  matches. Headline rates cover all selected flights; the weather table splits them
+  into condition groups. Selecting a different weather variable does not change
+  the headline population. A two-day selection is explicitly flagged because many
+  flights can share only one or two weather events. Changing support thresholds
+  reuses the same analytical aggregates. Raw full-pilot/daily diagnostics are not
+  shown. This is scheduled weather context, not national weather or a causal explanation.
 
 ## Controls and interpretation
 
 Filters apply immediately; **Reset filters** restores baseline dates, all carriers,
-all endpoints, the default support threshold and month grouping. Custom dates are
+all endpoints, the default support threshold and route grouping. Custom dates are
 authoritative. The applied-scope line identifies the queried population. On narrow
 screens, open or collapse Streamlit's sidebar to access filters or focus on results.
 
@@ -59,8 +62,8 @@ diversions. Signed delays retain early arrivals. Quantiles are computed on eligi
 flight values, never averaged from subgroup quantiles. Source rows do not represent
 passengers or distinct journeys.
 
-Short definitions are available beside the headline measures. An optional arrival-
-delay section explains typical, average and 90th-percentile delays in plain language.
-Data coverage and missing-data counts are under **About the data and measures**;
-internal release identifiers are not part of the dashboard. Product acceptance does not waive
-the separately documented infrastructure/security limitations.
+Short definitions are available beside headline measures. Arrival-delay summaries,
+weather matching counts and genuine missing-data issues are shown where they help
+interpret the analysis. Repeated technical-detail expanders and raw diagnostics are
+removed; internal release identifiers are not part of the dashboard. Product
+acceptance does not waive the separately documented infrastructure/security limitations.

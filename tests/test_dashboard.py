@@ -92,6 +92,26 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_routes_are_visible_default_and_no_technical_expanders_remain(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        self.assertEqual(len(app.expander), 0)
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertEqual(app.radio(key="group").value, "route")
+        self.assertIn("Routes", app.radio(key="group").options)
+        self.assertIn("Compare routes", [h.value for h in app.subheader])
+        self.assertEqual(len(app.expander), 0)
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        self.assertFalse(app.exception)
+        self.assertIn(
+            "Both route directions · same dates and airlines", [h.value for h in app.subheader]
+        )
+        self.assertNotIn("Compare routes", [h.value for h in app.subheader])
+        app.radio(key="group").set_value("hour").run()
+        self.assertNotIn(
+            "Both route directions · same dates and airlines", [h.value for h in app.subheader]
+        )
+
     def test_homepage_shows_all_airlines_with_metric_order_and_no_technical_dump(self):
         class AirlineReader(FixtureReader):
             def pin(self):
@@ -169,6 +189,8 @@ class DashboardTests(unittest.TestCase):
                 return {**super().pin(), "weather": {"weather_id": "fixture-only"}}
 
             def weather(self, descriptor, filters, *, details=True):
+                if details:
+                    raise AssertionError("Dashboard must not request raw weather diagnostics")
                 return {
                     "pilot_coverage": [
                         {"VARIABLE": "temperature", "SCHEDULED_ROWS": 10, "MATCHED_ROWS": 10}
@@ -197,7 +219,13 @@ class DashboardTests(unittest.TestCase):
         self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
         app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
-        self.assertTrue(any("five days" in w.value for w in app.warning))
+        self.assertTrue(any("only 2 days" in w.value for w in app.warning))
+        self.assertEqual(len(app.expander), 0)
+        self.assertEqual(len(app.checkbox), 0)
+        headline_values = [m.value for m in app.metric]
+        next(s for s in app.selectbox if s.label == "Weather variable").set_value("wind").run()
+        self.assertFalse(app.error)
+        self.assertEqual([m.value for m in app.metric], headline_values)
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
@@ -210,9 +238,10 @@ class DashboardTests(unittest.TestCase):
         headings = [h.value for h in app.subheader]
         self.assertIn("What types of delay were reported?", headings)
         self.assertIn("Did flights make up time after a late departure?", headings)
-        self.assertTrue(any("1,345" in str(w.value) for w in app.markdown))
+        self.assertEqual(len(app.expander), 0)
+        self.assertTrue(any("1,345" in str(w.value) for w in app.caption))
         self.assertTrue(
-            any("20" in str(w.value) and "not in the chart" in str(w.value) for w in app.markdown)
+            any("20" in str(w.value) and "not in the chart" in str(w.value) for w in app.caption)
         )
 
     def test_expired_token_stops_before_cached_results_without_fallback(self):
