@@ -146,3 +146,23 @@ The condition table and short-period warnings explain that one or two selected
 days are not many independent weather events. UI weather reads use core aggregates
 only; detailed query APIs remain available for offline/operational verification.
 No metric definitions, release checks, published data or infrastructure change.
+
+## Location labels and final presentation polish — 2026-11-09
+
+Owner-approved follow-up: route tables and chart hover text show city names with
+airport codes; chart axes may retain compact codes. Use city labels from the same
+pinned release's existing AIRPORTS view, matched by airport ID and code, not an
+external current-airport registry. Unknown combinations retain their source code.
+Filters and selected-journey context use these names too. This adds one bounded
+read of the released dimension to cached filter options; no release rebuild.
+
+Replace the raw applied-filter line with a travel-date/airline/journey summary and
+present the four unchanged headline rates as a shared Selection overview. Preserve
+the scheduled-flight count and KPI definition help. Different investigations of
+the same selected population correctly retain the same overview metrics.
+
+Reduce disruption/recovery commentary to essential population/interpretation
+context. Remove small operational reconciliation counts, repeated source/status
+footers and redundant explanatory paragraphs from the dashboard, not from query
+outputs or verification APIs. Retain low-support warnings and the weather scope,
+coverage and noncausal cautions. No metric definitions, filtering or data changes.

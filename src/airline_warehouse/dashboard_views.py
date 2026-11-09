@@ -80,13 +80,20 @@ def weather_scope(filters):
     ) <= filters.start <= filters.end <= dt.date(2025, 1, 31)
 
 
-def group_label(row, group):
+def airport_label(airport_id, code, locations=None):
+    city = (locations or {}).get((airport_id, code))
+    return f"{city} ({code})" if city else code
+
+
+def group_label(row, group, locations=None):
     if group == "carrier":
         return airline_label(row.get("MARKETING_CARRIER_ID"), row["MARKETING_LABEL"])
     if group == "airport":
-        return row["ORIGIN_LABEL"]
+        return airport_label(row.get("ORIGIN_ID"), row["ORIGIN_LABEL"], locations)
     if group == "route":
-        return f"{row['ORIGIN_LABEL']} → {row['DESTINATION_LABEL']}"
+        origin = airport_label(row.get("ORIGIN_ID"), row["ORIGIN_LABEL"], locations)
+        destination = airport_label(row.get("DESTINATION_ID"), row["DESTINATION_LABEL"], locations)
+        return f"{origin} → {destination}"
     if group == "month":
         return str(row["MONTH_START"])[:7]
     if group == "weekday":
@@ -114,13 +121,13 @@ def ordered_rows(rows, group):
     return sorted(rows, key=lambda r: r[field]) if field else list(rows)
 
 
-def comparison_table(rows, group):
+def comparison_table(rows, group, locations=None):
     def rate(v):
         return None if v is None else float(v) * 100
 
     return [
         {
-            "Group": group_label(r, group),
+            "Group": group_label(r, group, locations),
             "Scheduled": r["SCHEDULED_ROWS"],
             "On-time": rate(r["ARRIVAL_RATE"]),
             "Cancelled": rate(r["CANCELLATION_RATE"]),

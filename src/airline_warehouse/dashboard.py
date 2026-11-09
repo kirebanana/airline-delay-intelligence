@@ -26,6 +26,7 @@ from airline_warehouse.dashboard_views import (
     TASKS,
     WEATHER_BANDS,
     airline_label,
+    airport_label,
     arrival_timing,
     comparison_table,
     group_label,
@@ -175,7 +176,7 @@ def table(rows):
         st.info("No flights match these filters. N/A means no result, not 0%.")
 
 
-def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
+def plot(rows, label, value, *, order=None, horizontal=True, rate=False, tooltip_fields=()):
     if not rows or not any(r.get(value) is not None for r in rows):
         st.info("Not enough flight data to draw this chart.")
         return
@@ -200,6 +201,7 @@ def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
             },
             tooltip=[
                 alt.Tooltip(f"{label}:N"),
+                *[alt.Tooltip(f"{field}:N") for field in tooltip_fields],
                 alt.Tooltip(f"{value}:Q", format=".1%" if rate else ",.1f"),
             ],
         )
@@ -210,7 +212,7 @@ def plot(rows, label, value, *, order=None, horizontal=True, rate=False):
     st.altair_chart(chart, width="stretch")
 
 
-def comparison(rows, group, summary, minimum):
+def comparison(rows, group, summary, minimum, locations=None):
     st.subheader(
         "Compare "
         + {
@@ -274,11 +276,16 @@ def comparison(rows, group, summary, minimum):
             f"{len(rows) - len(eligible)} groups have fewer than {minimum:,} flights "
             "with the data needed for this measure; their chart values are left blank."
         )
-    group_title = "Airline" if group == "carrier" else "Group"
+    group_title = {"carrier": "Airline", "route": "Route", "airport": "Airport"}.get(group, "Group")
     plot(
         [
             {
                 group_title: group_label(r, group),
+                **(
+                    {"Location": group_label(r, group, locations)}
+                    if group in ("route", "airport")
+                    else {}
+                ),
                 metric: r[field] if r[denominator] >= minimum else None,
             }
             for r in selected
@@ -287,8 +294,9 @@ def comparison(rows, group, summary, minimum):
         metric,
         horizontal=not temporal,
         rate=True,
+        tooltip_fields=("Location",) if group in ("route", "airport") else (),
     )
-    compact = comparison_table(selected, group)
+    compact = comparison_table(selected, group, locations)
     # Deliberate primary columns: trade-offs together, support and quantiles nearby.
     primary = ["Group", "On-time", "Cancelled", "Diverted", "Scheduled", "p90 min"]
     if group == "airport":
@@ -314,10 +322,9 @@ def comparison(rows, group, summary, minimum):
 def disruption(data, minimum):
     s = data["summary"]
     st.subheader("What types of delay were reported?")
-    st.write(
-        f"Complete category data for {number(s['CATEGORY_COMPLETE'])} of "
-        f"{number(s['CATEGORY_ELIGIBLE'])} late arrivals. "
-        f"Missing category data: {number(s['MISSING_CATEGORY_ROWS'])} flights."
+    st.caption(
+        f"Reported delay minutes across {number(s['CATEGORY_COMPLETE'])} arrivals "
+        "at least 15 minutes late. A flight can have more than one reported reason."
     )
     categories = [
         {
@@ -343,27 +350,8 @@ def disruption(data, minimum):
             for r in categories
         ]
     )
-    st.caption(
-        "The chart divides reported delay minutes by category. A flight can have more than "
-        "one category, so the percentages of flights affected can add up to more than 100%. "
-        "These are reported explanations, not proof of cause."
-    )
-    st.caption(
-        "Includes arrivals at least 15 minutes late with all five categories reported; "
-        "excludes cancelled/diverted flights and unknown arrival status."
-    )
-    if s["MISSING_CATEGORY_ROWS"] or s["ALLOCATION_MISMATCH_ROWS"] or s["UNALLOCATED_MINUTES"]:
-        st.caption(
-            f"Data gaps: {number(s['EXCLUDED_ARRIVAL_MINUTES'])} delay minutes on flights missing "
-            f"categories are not in the chart. {number(s['ALLOCATION_MISMATCH_ROWS'])} flights' "
-            f"category totals differ from total delay; {number(s['UNALLOCATED_MINUTES'])} minutes "
-            "are unassigned. Original reported values are kept."
-        )
     st.subheader("Cancellation reasons")
-    st.caption(
-        "These percentages describe cancelled flights, not delay minutes. "
-        "Weather-related cancellations are separate from the weather delay category above."
-    )
+    st.caption("Share of cancelled flights by reported reason.")
     reasons = [
         {
             "Reason": r["CANCELLATION_REASON"].replace("NAS", "National Airspace System (NAS)"),
@@ -386,11 +374,6 @@ def disruption(data, minimum):
         f"average {number(s['IMPROVEMENT_MEAN'], ' min', 1)}, "
         f"typical (median) {number(s['IMPROVEMENT_MEDIAN'], ' min', 1)}."
     )
-    if s["IMPROVEMENT_P90"] is not None:
-        st.caption(
-            f"For 90% of these flights, minutes made up were no greater than "
-            f"{number(s['IMPROVEMENT_P90'], ' min', 1)}."
-        )
     bands = sorted(data["distribution"], key=lambda r: RECOVERY_ORDER.index(r["RECOVERY_BAND"]))
     distribution = [
         {
@@ -411,19 +394,9 @@ def disruption(data, minimum):
     plot(distribution, "Improvement band", "Share", rate=True)
     table([{**r, "Share": percent_value(r["Share"])} for r in distribution])
     st.caption(
-        "Making up time means the arrival was less late than the departure. "
-        "A flight can make up time and still arrive late."
+        "Among flights departing at least 15 minutes late and reaching their planned destination. "
+        "Making up time does not always mean arriving on time."
     )
-    st.caption(
-        "Includes flights departing at least 15 minutes late that reached their planned "
-        "destination with departure and arrival delay data. This does not prove faster flying."
-    )
-    if s.get("RECOVERY_MISSING_ARRIVAL") or s.get("RECOVERY_MISSING_DEPARTURE"):
-        st.caption(
-            f"Missing delay data: {number(s.get('RECOVERY_MISSING_ARRIVAL'))} late departures "
-            "lack arrival delay; "
-            f"{number(s.get('RECOVERY_MISSING_DEPARTURE'))} completed flights lack departure delay."
-        )
     if 0 < s["CATEGORY_COMPLETE"] < minimum or 0 < s["RECOVERY_ELIGIBLE"] < minimum:
         st.warning("One of these comparisons is based on fewer flights than your selected minimum.")
 
@@ -507,6 +480,11 @@ def render(reader):
     [data-testid="stMetricLabel"] p {white-space:normal; overflow:visible}
     [data-testid="stCaptionContainer"] {opacity:1; color:#475569}
     [data-testid="stCaptionContainer"] p {color:#475569; font-size:0.9rem}
+    .st-key-selection-summary {background:#F3F9FC; border-radius:16px}
+    .st-key-selection-summary [data-testid="stCaptionContainer"] p
+      {font-size:0.75rem; font-weight:600; letter-spacing:0.06em}
+    .st-key-headline-metrics [data-testid="stMetric"]
+      {background:#F8FCFE; border-top:3px solid #167D8D; border-radius:14px}
     @media (max-width:1100px) { [data-testid="stHorizontalBlock"] {flex-wrap:wrap}
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]
       {min-width:210px; flex:1 1 210px} }
@@ -587,9 +565,12 @@ def render(reader):
         if key not in st.session_state:
             st.session_state[key] = value
     carriers, airports = dict(options["carriers"]), dict(options["airports"])
+    locations = {
+        (airport_id, code): city for airport_id, code, city in options.get("airport_locations", [])
+    }
 
     def label(v):
-        return "All" if v is None else airports[v]
+        return "All" if v is None else airport_label(v, airports[v], locations)
 
     with st.sidebar:
         task = st.radio("Investigation", TASKS, key="task")
@@ -649,11 +630,22 @@ def render(reader):
         st.stop()
     filters = Filters(dates[0], dates[1], tuple(chosen), origin, destination)
     st.header(task)
-    st.caption(
-        f"Applied: {dates[0]}–{dates[1]} · "
-        f"{', '.join(airline_label(c, carriers[c]) for c in chosen) or 'All airlines'} · "
-        f"{label(origin)} → {label(destination)}"
-    )
+    with st.container(border=True, key="selection-summary"):
+        for col, title, value in zip(
+            st.columns([1, 1, 1.4]),
+            ["TRAVEL DATES", "AIRLINES", "JOURNEY"],
+            [
+                f"{dates[0]:%d %b %Y} – {dates[1]:%d %b %Y}",
+                ", ".join(airline_label(c, carriers[c]) for c in chosen) or "All airlines",
+                "All routes"
+                if origin is None and destination is None
+                else f"{label(origin) if origin is not None else 'All origins'} → "
+                f"{label(destination) if destination is not None else 'All destinations'}",
+            ],
+            strict=True,
+        ):
+            col.caption(title)
+            col.write(value)
     if task == TASKS[3]:
         st.info(
             "Weather is available for Denver departures in January 2025. "
@@ -680,15 +672,17 @@ def render(reader):
 
     try:
         summary = metrics()[0]
-        if task == TASKS[3]:
-            st.subheader("Flights in your selection")
-            st.caption(
-                "These headline rates cover all selected flights. "
-                "The weather table below compares conditions within this selection."
-            )
-        for col, (name, (field, denominator)) in zip(st.columns(4), RATES.items(), strict=True):
+        st.subheader("Selection overview")
+        with st.container(key="headline-metrics"):
+            headline_columns = st.columns(4)
+        for col, (name, (field, denominator)) in zip(headline_columns, RATES.items(), strict=True):
             col.metric(
-                name,
+                {
+                    "Arrival on-time": "On-time arrivals",
+                    "Cancellation": "Cancelled",
+                    "Diversion": "Diverted",
+                    "Departure delay ≥15 min": "Late departures (15+ min)",
+                }[name],
                 percent(summary[field]),
                 help={
                     "ARRIVAL_RATE": "Arrived less than 15 minutes late. Excludes cancelled "
@@ -747,7 +741,7 @@ def render(reader):
                     "to compare both directions of a specific route."
                 )
             if not (group == "route" and origin is not None and destination is not None):
-                comparison(metrics(group=group), group, summary, minimum)
+                comparison(metrics(group=group), group, summary, minimum, locations)
             if group == "hour":
                 st.caption(
                     "Hours use scheduled local departure time. Source 2400 is kept "
@@ -761,16 +755,21 @@ def render(reader):
                         [
                             {
                                 **summary,
-                                "ORIGIN_LABEL": label(origin),
-                                "DESTINATION_LABEL": label(destination),
+                                "ORIGIN_ID": origin,
+                                "DESTINATION_ID": destination,
+                                "ORIGIN_LABEL": airports[origin],
+                                "DESTINATION_LABEL": airports[destination],
                             },
                             {
                                 **reverse,
-                                "ORIGIN_LABEL": label(destination),
-                                "DESTINATION_LABEL": label(origin),
+                                "ORIGIN_ID": destination,
+                                "DESTINATION_ID": origin,
+                                "ORIGIN_LABEL": airports[destination],
+                                "DESTINATION_LABEL": airports[origin],
                             },
                         ],
                         "route",
+                        locations,
                     )
                 )
             previous = prior_year(filters, options["start"], options["end"])
@@ -856,21 +855,6 @@ def render(reader):
             "Typical is the middle arrival; long delays pull up the average. "
             "About 90% of arrivals had a delay no greater than the 90th percentile."
         )
-    unknowns = {
-        "arrival": summary["UNKNOWN_ARRIVAL"],
-        "departure": summary["UNKNOWN_DEPARTURE"],
-        "cancellation": summary["UNKNOWN_CANCELLED"],
-        "diversion": summary["UNKNOWN_DIVERTED"],
-    }
-    if any(unknowns.values()):
-        st.caption(
-            "Missing flight status: "
-            + ", ".join(f"{number(count)} {name}" for name, count in unknowns.items() if count)
-        )
-    st.caption(
-        "Source: US Department of Transportation airline reports. "
-        "Airlines serve different routes and schedules; these are descriptive comparisons."
-    )
 
 
 def main():

@@ -5,6 +5,7 @@ from airline_warehouse.analytics import Filters
 from airline_warehouse.dashboard_views import (
     WEATHER_BANDS,
     airline_label,
+    airport_label,
     arrival_timing,
     comparison_table,
     group_label,
@@ -18,6 +19,21 @@ from airline_warehouse.dashboard_views import (
 
 
 class PresentationTests(unittest.TestCase):
+    def test_location_names_require_id_and_code_and_preserve_route_direction(self):
+        locations = {(11292, "DEN"): "Denver, CO", (14771, "SFO"): "San Francisco, CA"}
+        row = {
+            "ORIGIN_ID": 11292,
+            "ORIGIN_LABEL": "DEN",
+            "DESTINATION_ID": 14771,
+            "DESTINATION_LABEL": "SFO",
+        }
+        self.assertEqual(group_label(row, "route"), "DEN → SFO")
+        self.assertEqual(
+            group_label(row, "route", locations), "Denver, CO (DEN) → San Francisco, CA (SFO)"
+        )
+        self.assertEqual(airport_label(99999, "DEN", locations), "DEN")
+        self.assertEqual(airport_label(11292, "SFO", locations), "SFO")
+
     def test_airline_names_require_matching_stable_id_and_code(self):
         self.assertEqual(airline_label(19930, "AS"), "Alaska Airlines (AS)")
         self.assertEqual(airline_label(20368, "G4"), "Allegiant Air (G4)")

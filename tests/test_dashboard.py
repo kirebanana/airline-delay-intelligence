@@ -1,5 +1,6 @@
 import datetime as dt
 import importlib.util
+import json
 import unittest
 
 if importlib.util.find_spec("streamlit"):
@@ -59,6 +60,10 @@ class FixtureReader:
             "end": dt.date(2025, 1, 2),
             "carriers": [(19393, "WN")],
             "airports": [(11292, "DEN"), (14771, "SFO")],
+            "airport_locations": [
+                (11292, "DEN", "Denver, CO"),
+                (14771, "SFO", "San Francisco, CA"),
+            ],
         }
 
     def metrics(self, descriptor, filters, group, minimum):
@@ -239,10 +244,50 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("What types of delay were reported?", headings)
         self.assertIn("Did flights make up time after a late departure?", headings)
         self.assertEqual(len(app.expander), 0)
-        self.assertTrue(any("1,345" in str(w.value) for w in app.caption))
-        self.assertTrue(
-            any("20" in str(w.value) and "not in the chart" in str(w.value) for w in app.caption)
-        )
+        captions = " ".join(w.value for w in app.caption)
+        self.assertNotIn("Data gaps:", captions)
+        self.assertNotIn("1,345", captions)
+        self.assertNotIn("Missing flight status:", captions)
+        self.assertIn("at least 15 minutes late", captions)
+        self.assertIn("does not always mean arriving on time", captions)
+
+    def test_selection_overview_and_named_directional_routes(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        self.assertIn("Selection overview", [h.value for h in app.subheader])
+        self.assertIn("On-time arrivals", [m.label for m in app.metric])
+        self.assertIn("All routes", [m.value for m in app.markdown])
+        self.assertIn("Denver, CO (DEN)", app.selectbox(key="origin").options)
+        app.radio(key="task").set_value("Time & routes").run()
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        self.assertFalse(app.exception)
+        frame = next(d.value for d in app.dataframe if "Group" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Group"], "Denver, CO (DEN) → San Francisco, CA (SFO)")
+
+    def test_route_ranking_table_has_locations_and_chart_has_location_tooltip(self):
+        class RouteReader(FixtureReader):
+            def metrics(self, descriptor, filters, group, minimum):
+                if group == "route":
+                    return [
+                        {
+                            **super().metrics(descriptor, filters, "all", minimum)[0],
+                            "ORIGIN_ID": 11292,
+                            "ORIGIN_LABEL": "DEN",
+                            "DESTINATION_ID": 14771,
+                            "DESTINATION_LABEL": "SFO",
+                        }
+                    ]
+                return super().metrics(descriptor, filters, group, minimum)
+
+        app = AppTest.from_function(render, args=(RouteReader(),)).run()
+        app.number_input(key="minimum").set_value(1).run()
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertFalse(app.exception)
+        frame = next(d.value for d in app.dataframe if "Route" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Route"], "Denver, CO (DEN) → San Francisco, CA (SFO)")
+        chart = app.get("vega_lite_chart")[0]
+        spec = json.loads(chart.proto.spec)
+        self.assertIn({"field": "Location", "type": "nominal"}, spec["encoding"]["tooltip"])
 
     def test_expired_token_stops_before_cached_results_without_fallback(self):
         class ExpiredReader(FixtureReader):

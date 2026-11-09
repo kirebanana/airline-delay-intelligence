@@ -131,7 +131,19 @@ def filter_options(connection, descriptor: dict, *, development=False) -> dict:
             "ORDER BY 1 LIMIT 1000"
         )
         airports = cur.fetchall()
-    return {"start": start, "end": end, "carriers": carriers, "airports": airports}
+        airport_table = table.rsplit(".", 1)[0] + (".DIM_AIRPORT" if development else ".AIRPORTS")
+        cur.execute(
+            f"SELECT airport_id,airport_code,city FROM {airport_table} "
+            "ORDER BY airport_id LIMIT 1000"
+        )
+        airport_locations = cur.fetchall()
+    return {
+        "start": start,
+        "end": end,
+        "carriers": carriers,
+        "airports": airports,
+        "airport_locations": airport_locations,
+    }
 
 
 def filter_predicate(filters: Filters):

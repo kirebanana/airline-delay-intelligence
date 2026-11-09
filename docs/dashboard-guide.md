@@ -19,6 +19,9 @@ publish data. One release descriptor is reused throughout each render.
   punctuality alone. Networks and schedules differ.
 - **Time & routes:** opens directly on routes. Visible choices switch to departure
   hour, day of week, month or departure airport. Use year/month and airline/airport filters.
+  Route tables and chart hover text show cities with airport codes from the pinned
+  release's airport dimension; compact chart axes retain codes. Unmatched identities
+  keep their code rather than guess a location.
   With both endpoints selected, inspect both directions together or use **Reverse
   route**. A prior-year comparator is available only when the entire reference
   period is within released coverage. Changes are percentage points, not percent
@@ -44,7 +47,9 @@ publish data. One release descriptor is reused throughout each render.
 
 Filters apply immediately; **Reset filters** restores baseline dates, all carriers,
 all endpoints, the default support threshold and route grouping. Custom dates are
-authoritative. The applied-scope line identifies the queried population. On narrow
+authoritative. Travel-date, airline and journey cards identify the queried population.
+The shared **Selection overview** describes that population, so its four rates stay
+the same across investigations unless the filters change. On narrow
 screens, open or collapse Streamlit's sidebar to access filters or focus on results.
 
 Chart comparisons use the flights with the information needed for each measure.
@@ -63,7 +68,8 @@ flight values, never averaged from subgroup quantiles. Source rows do not repres
 passengers or distinct journeys.
 
 Short definitions are available beside headline measures. Arrival-delay summaries,
-weather matching counts and genuine missing-data issues are shown where they help
-interpret the analysis. Repeated technical-detail expanders and raw diagnostics are
+weather matching counts and low-support warnings are shown where they help
+interpret the analysis. Operational reconciliation counts, repeated explanatory
+footers, technical-detail expanders and raw diagnostics are
 removed; internal release identifiers are not part of the dashboard. Product
 acceptance does not waive the separately documented infrastructure/security limitations.
