@@ -1,13 +1,19 @@
 import datetime as dt
 import importlib.util
+import json
 import unittest
 
 if importlib.util.find_spec("streamlit"):
     from streamlit.testing.v1 import AppTest
 
-    from airline_warehouse.dashboard import render
 else:
     AppTest = None
+
+
+def render(reader):
+    from airline_warehouse.dashboard import render as dashboard
+
+    dashboard(reader)
 
 
 class FixtureReader:
@@ -54,6 +60,10 @@ class FixtureReader:
             "end": dt.date(2025, 1, 2),
             "carriers": [(19393, "WN")],
             "airports": [(11292, "DEN"), (14771, "SFO")],
+            "airport_locations": [
+                (11292, "DEN", "Denver, CO"),
+                (14771, "SFO", "San Francisco, CA"),
+            ],
         }
 
     def metrics(self, descriptor, filters, group, minimum):
@@ -87,12 +97,105 @@ class FixtureReader:
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
 class DashboardTests(unittest.TestCase):
+    def test_routes_are_visible_default_and_no_technical_expanders_remain(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        self.assertEqual(len(app.expander), 0)
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertEqual(app.radio(key="group").value, "route")
+        self.assertIn("Routes", app.radio(key="group").options)
+        self.assertIn("Compare routes", [h.value for h in app.subheader])
+        self.assertEqual(len(app.expander), 0)
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        self.assertFalse(app.exception)
+        self.assertIn(
+            "Both route directions · same dates and airlines", [h.value for h in app.subheader]
+        )
+        self.assertNotIn("Compare routes", [h.value for h in app.subheader])
+        app.radio(key="group").set_value("hour").run()
+        self.assertNotIn(
+            "Both route directions · same dates and airlines", [h.value for h in app.subheader]
+        )
+
+    def test_homepage_shows_all_airlines_with_metric_order_and_no_technical_dump(self):
+        class AirlineReader(FixtureReader):
+            def pin(self):
+                return {**super().pin(), "processing_contract": "all-airlines-sort-fixture"}
+
+            def metrics(self, descriptor, filters, group, minimum):
+                base = super().metrics(descriptor, filters, "all", minimum)[0]
+                if group == "carrier":
+                    return [
+                        {
+                            **base,
+                            "MARKETING_LABEL": f"C{i:02}",
+                            "MARKETING_CARRIER_ID": 1000 + i,
+                            "ARRIVAL_RATE": i / 20,
+                            "ARRIVAL_DENOMINATOR": 500,
+                        }
+                        for i in range(11)
+                    ]
+                return [base] if group == "all" else []
+
+        app = AppTest.from_function(render, args=(AirlineReader(),)).run()
+        self.assertFalse(app.error)
+        self.assertEqual(len(app.slider), 0)
+        frame = next(d.value for d in app.dataframe if "Airline" in d.value.columns)
+        self.assertEqual(len(frame), 11)
+        self.assertEqual(frame.iloc[0]["Airline"], "C10")
+        app.selectbox(key="order_carrier").set_value("Lowest rate first").run()
+        frame = next(d.value for d in app.dataframe if "Airline" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Airline"], "C00")
+        self.assertEqual(len([d for d in app.dataframe if "On-time" in d.value.columns]), 1)
+        self.assertNotIn("Full comparison table and flight counts", [e.label for e in app.expander])
+        self.assertIn("Southwest Airlines (WN)", app.multiselect(key="carriers").options)
+        self.assertEqual(len(app.json), 0)
+        self.assertFalse(any("Signed arrival delay ·" in m.value for m in app.markdown))
+        self.assertTrue(
+            any('[data-testid="stCaptionContainer"] {opacity:1;' in m.value for m in app.markdown)
+        )
+
+    def test_secondary_values_sort_numerically_and_threshold_reuses_results(self):
+        class NumericReader(FixtureReader):
+            calls = 0
+
+            def pin(self):
+                return {**super().pin(), "processing_contract": "numeric-sort-fixture"}
+
+            def secondary(self, descriptor, filters):
+                self.calls += 1
+                result = super().secondary(descriptor, filters)
+                result["categories"] = [
+                    {
+                        "CATEGORY": str(i),
+                        "MINUTE_SHARE": value,
+                        "REPORTED_MINUTES": i * 100,
+                        "AFFECTED_RATE": value,
+                    }
+                    for i, value in enumerate([0.002, 0.195, 0.339, 0.404, 0.06])
+                ]
+                return result
+
+        reader = NumericReader()
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("Disruption & recovery").run()
+        frame = next(d.value for d in app.dataframe if "Minute share" in d.value.columns)
+        self.assertEqual(
+            list(frame.sort_values("Minute share")["Minute share"].round(1)),
+            [0.2, 6.0, 19.5, 33.9, 40.4],
+        )
+        app.number_input(key="minimum").set_value(800).run()
+        self.assertFalse(app.error)
+        self.assertEqual(reader.calls, 1)
+
     def test_fixed_weather_scope_coverage_and_empty_non_den_filters(self):
         class WeatherReader(FixtureReader):
             def pin(self):
                 return {**super().pin(), "weather": {"weather_id": "fixture-only"}}
 
-            def weather(self, descriptor, filters):
+            def weather(self, descriptor, filters, *, details=True):
+                if details:
+                    raise AssertionError("Dashboard must not request raw weather diagnostics")
                 return {
                     "pilot_coverage": [
                         {"VARIABLE": "temperature", "SCHEDULED_ROWS": 10, "MATCHED_ROWS": 10}
@@ -101,26 +204,101 @@ class DashboardTests(unittest.TestCase):
                     "daily": [],
                     "comparisons": []
                     if filters.origin == 14771
-                    else [{"LOCAL_DATES": 1, "SCHEDULED_ROWS": 10}],
+                    else [
+                        {
+                            "VARIABLE": "temperature",
+                            "BAND": "cold",
+                            "LOCAL_DATES": 1,
+                            "SCHEDULED_ROWS": 10,
+                            "DEPARTURE_DENOMINATOR": 8,
+                            "DEPARTURE_DELAY_RATE": 0.25,
+                            "CANCELLATION_RATE": 0.1,
+                            "LARGEST_DATE_SHARE": 1,
+                        }
+                    ],
                 }
 
         app = AppTest.from_function(render, args=(WeatherReader(),)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+        app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
-        self.assertTrue(any("five local dates" in w.value for w in app.warning))
+        self.assertTrue(any("only 2 days" in w.value for w in app.warning))
+        self.assertEqual(len(app.expander), 0)
+        self.assertEqual(len(app.checkbox), 0)
+        self.assertEqual(len(app.metric), 0)
+        self.assertNotIn("Selection overview", [h.value for h in app.subheader])
+        self.assertTrue(any("10 scheduled flights" in m.value for m in app.markdown))
+        next(s for s in app.selectbox if s.label == "Weather variable").set_value("wind").run()
+        self.assertFalse(app.error)
+        self.assertEqual(len(app.metric), 0)
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
-        self.assertTrue(any("No DEN pilot rows" in w.value for w in app.info))
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
 
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        app.radio(key="task").set_value("Disruption & recovery").run()
         self.assertFalse(app.exception)
         headings = [h.value for h in app.subheader]
-        self.assertIn("Reported delay categories", headings)
-        self.assertIn("Schedule-relative recovery", headings)
-        self.assertTrue(any("1345" in str(w.value) for w in app.warning))
-        self.assertTrue(
-            any("20" in str(w.value) and "Excluded" in str(w.value) for w in app.markdown)
+        self.assertIn("What types of delay were reported?", headings)
+        self.assertIn("Did flights make up time after a late departure?", headings)
+        self.assertEqual(len(app.expander), 0)
+        self.assertNotIn("Selection overview", headings)
+        self.assertNotIn("On-time arrivals", [m.label for m in app.metric])
+        self.assertIn(
+            "Late departures that arrived less than 15 minutes late", [m.label for m in app.metric]
         )
+        self.assertTrue(any("10 scheduled flights" in m.value for m in app.markdown))
+        captions = " ".join(w.value for w in app.caption)
+        self.assertNotIn("Data gaps:", captions)
+        self.assertNotIn("1,345", captions)
+        self.assertNotIn("Missing flight status:", captions)
+        self.assertIn("at least 15 minutes late", captions)
+        self.assertIn("does not always mean arriving on time", captions)
+
+    def test_selection_overview_and_named_directional_routes(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        self.assertIn("Selection overview", [h.value for h in app.subheader])
+        self.assertIn("On-time arrivals", [m.label for m in app.metric])
+        self.assertIn("All routes", [m.value for m in app.markdown])
+        self.assertIn("Denver, CO (DEN)", app.selectbox(key="origin").options)
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertNotIn("Selection overview", [h.value for h in app.subheader])
+        self.assertEqual(len(app.metric), 0)
+        self.assertTrue(any("10 scheduled flights" in m.value for m in app.markdown))
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        self.assertFalse(app.exception)
+        frame = next(d.value for d in app.dataframe if "Group" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Group"], "Denver, CO (DEN) → San Francisco, CA (SFO)")
+
+    def test_route_ranking_table_has_locations_and_chart_has_location_tooltip(self):
+        class RouteReader(FixtureReader):
+            def metrics(self, descriptor, filters, group, minimum):
+                if group == "route":
+                    return [
+                        {
+                            **super().metrics(descriptor, filters, "all", minimum)[0],
+                            "ORIGIN_ID": 11292,
+                            "ORIGIN_LABEL": "DEN",
+                            "DESTINATION_ID": 14771,
+                            "DESTINATION_LABEL": "SFO",
+                        }
+                    ]
+                return super().metrics(descriptor, filters, group, minimum)
+
+        app = AppTest.from_function(render, args=(RouteReader(),)).run()
+        app.number_input(key="minimum").set_value(1).run()
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertFalse(app.exception)
+        frame = next(d.value for d in app.dataframe if "Route" in d.value.columns)
+        self.assertEqual(frame.iloc[0]["Route"], "Denver, CO (DEN) → San Francisco, CA (SFO)")
+        chart = app.get("vega_lite_chart")[0]
+        spec = json.loads(chart.proto.spec)
+        self.assertIn({"field": "Location", "type": "nominal"}, spec["encoding"]["tooltip"])
 
     def test_expired_token_stops_before_cached_results_without_fallback(self):
         class ExpiredReader(FixtureReader):
@@ -135,13 +313,51 @@ class DashboardTests(unittest.TestCase):
         app = AppTest.from_function(render, args=(ExpiredReader(),)).run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
-        self.assertTrue(any("Reload" in message.value for message in app.error))
+        self.assertTrue(any("reload" in message.value.lower() for message in app.error))
 
     def test_filters_empty_and_reset_preserve_explicit_development_scope(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()
         self.assertFalse(app.exception)
         self.assertTrue(any("UNPUBLISHED" in w.value for w in app.warning))
         self.assertEqual(app.metric[0].value, "60.0%")
+        self.assertIsNone(app.selectbox(key="origin").value)
+        self.assertEqual(app.multiselect(key="carriers").value, [])
+        app.selectbox(key="destination").set_value(11292).run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+        app.selectbox(key="origin").set_value(14771).run()
+        app.multiselect(key="carriers").set_value([19393]).run()
+        app.number_input(key="minimum").set_value(200).run()
+        app.button(key="reset").click().run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+        self.assertIsNone(app.selectbox(key="destination").value)
+        self.assertEqual(app.multiselect(key="carriers").value, [])
+        self.assertEqual(app.number_input(key="minimum").value, 100)
+        self.assertEqual(app.metric[0].value, "60.0%")
+        app.selectbox(key="destination").set_value(11292).run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+
+    def test_route_swap_and_prior_year_unavailable_are_safe(self):
+        app = AppTest.from_function(render, args=(FixtureReader(),)).run()
+        app.radio(key="task").set_value("Time & routes").run()
+        app.selectbox(key="origin").set_value(11292).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        next(b for b in app.button if b.label == "Reverse route").click().run()
+        self.assertEqual(app.selectbox(key="origin").value, 14771)
+        self.assertEqual(app.selectbox(key="destination").value, 11292)
+        self.assertFalse(app.error)
+        self.assertTrue(app.checkbox[0].disabled)
+
+    def test_unrelated_sections_are_not_queried(self):
+        class CountingReader(FixtureReader):
+            def secondary(self, *args):
+                raise AssertionError("Network task must not query secondary")
+
+            def weather(self, *args):
+                raise AssertionError("Network task must not query weather")
+
+        app = AppTest.from_function(render, args=(CountingReader(),)).run()
+        self.assertFalse(app.error)
+        self.assertFalse(app.exception)
         app.selectbox(key="origin").set_value(14771).run()
         self.assertFalse(app.exception)
         self.assertEqual(app.metric[0].value, "N/A")

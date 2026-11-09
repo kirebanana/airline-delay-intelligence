@@ -18,6 +18,7 @@ textColor = "#16354A"
 linkColor = "#006E9C"
 borderColor = "#CFE4F0"
 dataframeHeaderBackgroundColor = "#E3F3FA"
+dataframeHeaderTextColor = "#16354A"
 showWidgetBorder = true
 baseRadius = "large"
 chartCategoricalColors = ["#007F9E", "#2274B5", "#4DBBD5", "#6B83B6", "#D98935", "#768B98"]

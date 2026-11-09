@@ -1,0 +1,19 @@
+{
+  "source": "BTS L_AIRLINE_ID lookup, archived third-party mirror",
+  "url": "https://raw.githubusercontent.com/bbejeck/spark-experiments/59b7c5a5d59d4ecc909e426d9ba544b442cc84dd/src/main/resources/airtraffic/L_AIRLINE_ID.csv-",
+  "source_sha256": "f4f2213175442c686f2ef1f8d16e4303ba8977eaa910071fb42241207cc4ebbf",
+  "verified_on": "2026-11-08",
+  "scope": "Display names for the 2023–2025 marketing-carrier baseline; matched on DOT ID and code. Company suffixes shortened for display. Not a current carrier registry.",
+  "airlines": {
+    "19393": {"code": "WN", "name": "Southwest Airlines"},
+    "19690": {"code": "HA", "name": "Hawaiian Airlines"},
+    "19790": {"code": "DL", "name": "Delta Air Lines"},
+    "19805": {"code": "AA", "name": "American Airlines"},
+    "19930": {"code": "AS", "name": "Alaska Airlines"},
+    "19977": {"code": "UA", "name": "United Air Lines"},
+    "20368": {"code": "G4", "name": "Allegiant Air"},
+    "20409": {"code": "B6", "name": "JetBlue Airways"},
+    "20416": {"code": "NK", "name": "Spirit Air Lines"},
+    "20436": {"code": "F9", "name": "Frontier Airlines"}
+  }
+}

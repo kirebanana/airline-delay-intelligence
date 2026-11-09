@@ -131,7 +131,19 @@ def filter_options(connection, descriptor: dict, *, development=False) -> dict:
             "ORDER BY 1 LIMIT 1000"
         )
         airports = cur.fetchall()
-    return {"start": start, "end": end, "carriers": carriers, "airports": airports}
+        airport_table = table.rsplit(".", 1)[0] + (".DIM_AIRPORT" if development else ".AIRPORTS")
+        cur.execute(
+            f"SELECT airport_id,airport_code,city FROM {airport_table} "
+            "ORDER BY airport_id LIMIT 1000"
+        )
+        airport_locations = cur.fetchall()
+    return {
+        "start": start,
+        "end": end,
+        "carriers": carriers,
+        "airports": airports,
+        "airport_locations": airport_locations,
+    }
 
 
 def filter_predicate(filters: Filters):
@@ -218,7 +230,7 @@ def query_secondary(connection, descriptor, filters, *, development=False):
     }
 
 
-def query_weather(connection, descriptor, filters, *, development=False):
+def query_weather(connection, descriptor, filters, *, development=False, details=True):
     relation(descriptor, development=development)
     if not descriptor.get("weather"):
         raise ValueError("This release does not contain the qualified fixed weather pilot")
@@ -285,18 +297,19 @@ def query_weather(connection, descriptor, filters, *, development=False):
                 parameters,
             )
         )
-        daily.extend(
-            {"VARIABLE": v, **row}
-            for row in read(
-                f"""
+        if details:
+            daily.extend(
+                {"VARIABLE": v, **row}
+                for row in read(
+                    f"""
             SELECT flight_date,COUNT(*) AS scheduled_rows,
                 COALESCE(COUNT_IF({v}_match_status='matched'),0) AS matched_rows
             FROM ({scope}) GROUP BY flight_date ORDER BY flight_date""",
-                parameters,
+                    parameters,
+                )
             )
-        )
     return {
-        "pilot_coverage": coverage(f"SELECT * FROM {table}", []),
+        "pilot_coverage": coverage(f"SELECT * FROM {table}", []) if details else [],
         "selected_coverage": coverage(scope, parameters),
         "comparisons": comparisons,
         "daily": daily,
