@@ -3,6 +3,7 @@
 import calendar
 import datetime as dt
 import json
+from dataclasses import dataclass
 from functools import lru_cache
 from importlib.resources import files
 
@@ -74,10 +75,84 @@ WEATHER_BANDS = {
 }
 
 
-def weather_scope(filters):
-    return filters.origin == 11292 and dt.date(
-        2025, 1, 1
-    ) <= filters.start <= filters.end <= dt.date(2025, 1, 31)
+@dataclass(frozen=True)
+class WeatherCoverage:
+    start: dt.date
+    end: dt.date  # inclusive local source dates, unlike manifest's exclusive end
+    origin_id: int = 11292
+
+    @property
+    def label(self):
+        if self.start.day == 1 and self.end == dt.date(
+            self.start.year,
+            self.start.month,
+            calendar.monthrange(self.start.year, self.start.month)[1],
+        ):
+            return self.start.strftime("%B %Y")
+        if self.start == dt.date(self.start.year, 1, 1) and self.end == dt.date(
+            self.end.year, 12, 31
+        ):
+            return f"{self.start.year}–{self.end.year}"
+        return f"{self.start:%d %b %Y} – {self.end:%d %b %Y}"
+
+
+def weather_coverage(manifest):
+    """Presentation-only scope allowlist; never infer weather dates from flight dates.
+
+    Legacy UTC observation bounds include lookback and are not local flight dates.
+    Only that known contract may omit explicit local scope metadata.
+    """
+    if not isinstance(manifest, dict) or manifest.get("origin_id") != 11292:
+        return None
+    contract = manifest.get("contract")
+    if contract == "den-isd-aviation-qc15-independent-60m-v1":
+        station, earliest, latest = "72565003017", dt.date(2025, 1, 1), dt.date(2025, 2, 1)
+        for key, expected in (
+            ("start", "2025-01-01T06:00:00+00:00"),
+            ("end", "2025-02-01T07:00:00+00:00"),
+        ):
+            if key in manifest and manifest[key] != expected:
+                return None
+    elif contract == "den-ghcnh-aviation-independent-60m-v2":
+        station, earliest, latest = "USW00003017", dt.date(2023, 1, 1), dt.date(2026, 1, 1)
+        if "scope_start" not in manifest or "scope_end_exclusive" not in manifest:
+            return None
+    else:
+        return None
+    if manifest.get("station") != station:
+        return None
+    if "scope_start" not in manifest and "scope_end_exclusive" not in manifest:
+        return WeatherCoverage(earliest, latest - dt.timedelta(days=1))
+    try:
+        start = dt.date.fromisoformat(manifest["scope_start"])
+        end = dt.date.fromisoformat(manifest["scope_end_exclusive"])
+        if (
+            start.isoformat() != manifest["scope_start"]
+            or end.isoformat() != manifest["scope_end_exclusive"]
+        ):
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not earliest <= start < end <= latest:
+        return None
+    return WeatherCoverage(start, end - dt.timedelta(days=1))
+
+
+_DEFAULT_WEATHER_MANIFEST = object()
+
+
+def weather_scope(filters, manifest=_DEFAULT_WEATHER_MANIFEST):
+    # Retain the original one-argument January helper, not a production fallback.
+    coverage = (
+        WeatherCoverage(dt.date(2025, 1, 1), dt.date(2025, 1, 31))
+        if manifest is _DEFAULT_WEATHER_MANIFEST
+        else weather_coverage(manifest)
+    )
+    return bool(
+        coverage
+        and filters.origin == coverage.origin_id
+        and coverage.start <= filters.start <= filters.end <= coverage.end
+    )
 
 
 def airport_label(airport_id, code, locations=None):

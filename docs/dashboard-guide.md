@@ -31,16 +31,23 @@ publish data. One release descriptor is reused throughout each render.
   ordinary late departures with both signed delays known; negative improvement
   means the flight worsened. Arriving below 15 minutes late is distinct from any
   positive improvement.
-- **DEN weather investigation:** **Use DEN · January 2025** selects the qualified
-  pilot. When filters are outside that pilot, no KPIs/results appear; the main
-  **Align filters to DEN · January 2025** action explicitly selects the pilot.
+- **DEN weather investigation:** **Use DEN · [available period]** selects Denver
+  and the weather dates in the pinned release, intersected with available flight dates.
+  The approved GHCNh extension supports 2023–2025 when those dates are present in a
+  validated release; this guide does not claim that an extended release is published.
+  Original ISD releases remain January 2025 only, even when flight coverage is broader.
+  When filters are outside that weather scope, no KPIs/results appear; the main
+  **Align filters to DEN · [available period]** action explicitly selects that scope,
+  clearing airline and destination filters. Unknown contracts, missing scope metadata
+  for the new contract, or malformed dates disable weather results and alignment;
+  flight coverage alone never establishes weather coverage.
   Explore temperature, wind or visibility separately. Inspect departure
   eligibility, cancellations, date support, largest-date concentration and missing
   matches. The flight count covers all selected flights; the weather table splits them
   into condition groups. Selecting a different weather variable does not change
   the selected population. A two-day selection is explicitly flagged because many
   flights can share only one or two weather events. Changing support thresholds
-  reuses the same analytical aggregates. Raw full-pilot/daily diagnostics are not
+  reuses the same analytical aggregates. Raw full-scope/daily diagnostics are not
   shown. This is scheduled weather context, not national weather or a causal explanation.
 
 ## Controls and interpretation
@@ -48,6 +55,9 @@ publish data. One release descriptor is reused throughout each render.
 Filters apply immediately; **Reset filters** restores baseline dates, all carriers,
 all endpoints, the default support threshold and route grouping. Custom dates are
 authoritative. Travel-date, airline and journey cards identify the queried population.
+Reset does not silently select Denver: weather results still require explicit
+in-scope origin and date filters. Short-window suggestions use the available weather
+period rather than assuming January.
 The **Selection overview** cards appear only on Network & carriers. The other
 investigations retain the selection summary and scheduled-flight count, then lead
 with their own comparisons or findings instead of repeating those four rates. On narrow

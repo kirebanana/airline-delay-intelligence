@@ -13,6 +13,7 @@ from airline_warehouse.dashboard_views import (
     percent_value,
     prior_year,
     sort_comparisons,
+    weather_coverage,
     weather_scope,
     weather_support,
 )
@@ -96,6 +97,67 @@ class PresentationTests(unittest.TestCase):
         spec = draw.call_args.args[0].to_dict()
         self.assertFalse(spec["encoding"]["y"]["axis"]["labelOverlap"])
         self.assertGreaterEqual(spec["height"], 320)
+
+    def test_manifest_scope_allowlist_never_widens_invalid_or_legacy_dates(self):
+        from dataclasses import replace
+
+        legacy = {
+            "contract": "den-isd-aviation-qc15-independent-60m-v1",
+            "origin_id": 11292,
+            "station": "72565003017",
+            "start": "2025-01-01T06:00:00+00:00",
+            "end": "2025-02-01T07:00:00+00:00",
+        }
+        new = {
+            "contract": "den-ghcnh-aviation-independent-60m-v2",
+            "origin_id": 11292,
+            "station": "USW00003017",
+            "scope_start": "2023-01-01",
+            "scope_end_exclusive": "2026-01-01",
+        }
+        full = Filters(dt.date(2023, 1, 1), dt.date(2025, 12, 31), origin=11292)
+        self.assertTrue(weather_scope(full, new))
+        self.assertFalse(weather_scope(full, legacy))
+        self.assertFalse(weather_scope(full, None))
+        self.assertFalse(weather_scope(replace(full, origin=None), new))
+        self.assertFalse(weather_scope(replace(full, origin=14771), new))
+        self.assertFalse(weather_scope(replace(full, end=dt.date(2026, 1, 1)), new))
+        january = replace(full, start=dt.date(2025, 1, 1), end=dt.date(2025, 1, 31))
+        self.assertTrue(weather_scope(january, legacy))
+        self.assertEqual(weather_coverage(legacy).label, "January 2025")
+        self.assertEqual(weather_coverage(new).label, "2023–2025")
+        narrow = {**new, "scope_start": "2024-02-28", "scope_end_exclusive": "2024-03-01"}
+        self.assertTrue(
+            weather_scope(
+                replace(full, start=dt.date(2024, 2, 28), end=dt.date(2024, 2, 29)), narrow
+            )
+        )
+        self.assertFalse(weather_scope(full, narrow))
+        for bad in [
+            None,
+            [],
+            {},
+            {"weather_id": "fixture-only"},
+            {**new, "contract": "unknown"},
+            {**new, "origin_id": 14771},
+            {**new, "station": "72565003017"},
+            {**new, "scope_start": "20230101"},
+            {**new, "scope_start": None},
+            {**new, "scope_start": "2022-12-31"},
+            {**new, "scope_start": "2026-01-01"},
+            {**new, "scope_end_exclusive": "2026-01-02"},
+            {**new, "scope_end_exclusive": "2025-02-30"},
+            {**legacy, "scope_start": "2023-01-01", "scope_end_exclusive": "2026-01-01"},
+            {**legacy, "scope_start": "2025-01-01"},
+            {**legacy, "start": "invalid"},
+            *[
+                {k: v for k, v in new.items() if k != field}
+                for field in ("scope_start", "scope_end_exclusive", "station", "origin_id")
+            ],
+        ]:
+            with self.subTest(manifest=bad):
+                self.assertIsNone(weather_coverage(bad))
+                self.assertFalse(weather_scope(january, bad))
 
     def test_comparison_cells_keep_numeric_sorting_and_missing_quantiles(self):
         row = {
