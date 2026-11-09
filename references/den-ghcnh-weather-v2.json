@@ -1,0 +1,32 @@
+{
+  "version": "den-ghcnh-station-source-time-v2",
+  "contract": "den-ghcnh-aviation-independent-60m-v2",
+  "scope_start": "2023-01-01",
+  "scope_end_exclusive": "2026-01-01",
+  "start": "2023-01-01T06:00:00+00:00",
+  "end": "2026-01-01T07:00:00+00:00",
+  "station": "USW00003017",
+  "station_name": "DENVER INTL AP",
+  "wmo": "72565",
+  "latitude": "39.8467",
+  "longitude": "-104.6561",
+  "origin_id": 11292,
+  "origin_sequences": ["1129202", "1129203"],
+  "iata": "DEN",
+  "icao": "KDEN",
+  "timezone": "America/Denver",
+  "timezone_sha256": "32e819c00a43b3c348f539d700d425504f20b8d068c16418d26fa9b693e775c9",
+  "source_stations": {"343": "725650-03017", "223": "ICAO-KDEN"},
+  "quality_acceptance": {"343": ["1", "5", "A"], "223": ["1"]},
+  "documentation_url": "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly/doc/ghcnh_DOCUMENTATION.pdf",
+  "documentation_sha256": "df5694efdc2d498f006a343165bae65701d14809174b9bed660149bd4fe591b7",
+  "documentation_version": "1.1.0 (2026-03-10)",
+  "source_objects": {
+    "2023": {"sha256": "eb2b46fd923c561f2345530271301441b67985c47427cc6ed692e465b004ad69", "etag": "\"4a91b492bbcdbbd94db968e37021a04f\"", "last_modified": "Sat, 11 Jul 2026 12:06:07 GMT"},
+    "2024": {"sha256": "1729c49ef31c52114c12c2c0a048289590e5b405221075ca55e4fef17e683a46", "etag": "\"68079d637a876b93be2268f7bc87ebc8\"", "last_modified": "Sat, 11 Jul 2026 16:00:09 GMT"},
+    "2025": {"sha256": "3f8e5f2637aeb123c52d8355bfb3e4b5d753aa8779ac9e7a4d8c6ee5dee68385", "etag": "\"a81728588e72fe3bb9ff568d814a3797\"", "last_modified": "Fri, 23 Oct 2026 05:46:07 GMT"},
+    "2026": {"sha256": "f1b4c2dd26eb017056a69e2bfb6f97210830687d3026b581defbed6d2b96a329", "etag": "\"8e579f0bb12b9362d51a190eeb15c3bf\"", "last_modified": "Mon, 09 Nov 2026 00:07:15 GMT", "content_range": "bytes 0-32767/40563877"}
+  },
+  "sequence_evidence": "Accepted BTS flight release 02d263d7f7174890b6da97c15a81d098: DEN origin ID 11292; sequence 1129202 through June 2025 and 1129203 July-December 2025. Sequence changes do not create a second airport. This is source-row evidence, not proof that sensors or runways were unchanged.",
+  "mapping_rationale": "NOAA station inventory USW00003017 DENVER INTL AP WMO72565 at 39.8467,-104.6561; aviation REM records corroborate KDEN for legacy source station 725650-03017. New-source identity is ICAO-KDEN. Airport-level context only, not runway conditions or a sensor relocation history."
+}

@@ -1,6 +1,38 @@
 {{ config(enabled=var('weather_enabled', false)) }}
 -- One row per scheduled pilot source row. No actual/cancellation event anchor.
 with anchors as (
+{% if var('weather_contract', 'den-isd-aviation-qc15-independent-60m-v1') == 'den-ghcnh-aviation-independent-60m-v2' %}
+    select flight_key, flight_date, marketing_carrier_id, origin_id, destination_id,
+           cancelled, diverted, departure_eligible, departure_delayed,
+           "FlightDate" as source_date, "CRSDepTime" as source_clock,
+           "OriginAirportSeqID" as source_origin_sequence,
+           '{{ var("weather_station") }}' as station,
+           case when "Origin"<>'DEN' or "Origin" is null
+                     or "OriginAirportSeqID" not in ('1129202','1129203')
+                     or "OriginAirportSeqID" is null then 'invalid_mapping'
+                when regexp_like("CRSDepTime",'[0-9]{1,4}')
+                     and try_to_number("CRSDepTime") in (0,2400) then 'unresolved_midnight'
+                when not regexp_like("CRSDepTime",'[0-9]{1,4}') or "CRSDepTime" is null
+                     or try_to_number("CRSDepTime") not between 1 and 2359
+                     or mod(try_to_number("CRSDepTime"),100)>=60 then 'invalid_clock'
+                -- US DST rules for this explicit 2023-2025 contract. The independent
+                -- pinned Python timezone oracle verifies every row before publication.
+                when flight_date=dateadd(day,7+mod(7-dayofweekiso(date_from_parts(year(flight_date),3,1)),7),
+                                         date_from_parts(year(flight_date),3,1))
+                     and floor(try_to_number("CRSDepTime")/100)=2 then 'nonexistent_local_time'
+                when flight_date=dateadd(day,mod(7-dayofweekiso(date_from_parts(year(flight_date),11,1)),7),
+                                         date_from_parts(year(flight_date),11,1))
+                     and floor(try_to_number("CRSDepTime")/100)=1 then 'ambiguous_local_time'
+                else 'resolved' end as anchor_status,
+           case when anchor_status='resolved' then
+               convert_timezone('America/Denver','UTC',
+                   dateadd(minute, mod(try_to_number("CRSDepTime"),100),
+                       dateadd(hour, floor(try_to_number("CRSDepTime")/100),
+                           flight_date::timestamp_ntz))) end as scheduled_utc
+    from {{ ref('fact_flights') }}
+    where origin_id=11292 and flight_date>='{{ var("weather_scope_start") }}'
+          and flight_date<'{{ var("weather_scope_end") }}'
+{% else %}
     select flight_key, flight_date, marketing_carrier_id, origin_id, destination_id,
            cancelled, diverted, departure_eligible, departure_delayed,
            "FlightDate" as source_date, "CRSDepTime" as source_clock,
@@ -16,6 +48,7 @@ with anchors as (
                            flight_date::timestamp_ntz))) end as scheduled_utc
     from {{ ref('fact_flights') }}
     where origin_id=11292 and flight_date>='2025-01-01' and flight_date<'2025-02-01'
+{% endif %}
 ),
 {% for v in ['temperature','wind','visibility'] %}
 {{ v }}_raw as (select * from {{ ref('weather_observations') }} where variable='{{ v }}'),
@@ -25,7 +58,12 @@ select a.*,
 {% for v in ['temperature','wind','visibility'] %}
        {{ v }}.observed_at as {{ v }}_observed_at,
        datediff(second,{{ v }}.observed_at,a.scheduled_utc) as {{ v }}_age_seconds,
-       case when a.scheduled_utc is null then 'mapping_or_time'
+       case when a.scheduled_utc is null then
+{% if var('weather_contract', 'den-isd-aviation-qc15-independent-60m-v1') == 'den-ghcnh-aviation-independent-60m-v2' %}
+                 a.anchor_status
+{% else %}
+                 'mapping_or_time'
+{% endif %}
             when {{ v }}.observed_at is null then 'no_prior_accepted'
             when {{ v }}_age_seconds>3600 then 'stale'
             else 'matched' end as {{ v }}_match_status,

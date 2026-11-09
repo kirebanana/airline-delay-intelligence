@@ -278,6 +278,10 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
     if not 1 <= timeout_seconds <= 300:
         raise ValueError("Publication timeout must fit the approved five-minute bound")
     relation(candidate, development=True)
+    if candidate.get("weather"):
+        from airline_warehouse.weather import validate_weather_inputs
+
+        validate_weather_inputs(candidate["weather"], candidate.get("inputs", {}))
     if set(candidate.get("inputs", {})) == BASELINE_MONTHS and not candidate.get("weather"):
         raise ValueError("A complete baseline requires its validated fixed weather dependency")
     if token["target"] == "january" and (
@@ -309,10 +313,11 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
                 f"CLONE AIRLINE_DB.{candidate['schema']}.{table}"
             )
     _validate_frozen(connection, schema, candidate)
+    weather_validation = None
     if candidate.get("weather"):
         from airline_warehouse.weather import validate_frozen_weather
 
-        validate_frozen_weather(connection, schema, candidate["weather"])
+        weather_validation = validate_frozen_weather(connection, schema, candidate["weather"])
     with connection.cursor() as cur:
         cur.execute(f"GRANT USAGE ON SCHEMA AIRLINE_DB.{schema} TO ROLE AIRLINE_READER_ROLE")
         for view, table in (
@@ -357,6 +362,8 @@ def publish(connection, token, candidate, release_id, *, timeout_seconds=300, ev
         descriptor["analytical_contract"] = candidate["analytical_contract"]
     if candidate.get("weather"):
         descriptor["weather"] = candidate["weather"]
+    if weather_validation is not None:
+        descriptor["weather_validation"] = weather_validation
     with _locked(connection, token["target"]) as (cur, row):
         _authority(row, token)
         cur.execute(
