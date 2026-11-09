@@ -416,10 +416,7 @@ def weather_view(data, minimum, selected_days=None):
         }[x],
     )
     st.subheader(f"Departure delays and cancellations by {variable}")
-    st.caption(
-        "Each row groups flights by the weather near their scheduled departure. "
-        "Changing the weather variable does not change the headline flight totals above."
-    )
+    st.caption("Each row groups selected flights by the weather near their scheduled departure.")
     rows = [r for r in data["comparisons"] if r["VARIABLE"] == variable]
     bands = WEATHER_BANDS[variable]
     rows.sort(key=lambda r: bands.index(r["BAND"]) if r["BAND"] in bands else len(bands))
@@ -672,29 +669,35 @@ def render(reader):
 
     try:
         summary = metrics()[0]
-        st.subheader("Selection overview")
-        with st.container(key="headline-metrics"):
-            headline_columns = st.columns(4)
-        for col, (name, (field, denominator)) in zip(headline_columns, RATES.items(), strict=True):
-            col.metric(
-                {
-                    "Arrival on-time": "On-time arrivals",
-                    "Cancellation": "Cancelled",
-                    "Diversion": "Diverted",
-                    "Departure delay ≥15 min": "Late departures (15+ min)",
-                }[name],
-                percent(summary[field]),
-                help={
-                    "ARRIVAL_RATE": "Arrived less than 15 minutes late. Excludes cancelled "
-                    "and diverted flights and unknown arrival status.",
-                    "CANCELLATION_RATE": "The percentage of scheduled flights that were cancelled.",
-                    "DIVERSION_RATE": "Diverted flights as a percentage of all scheduled flights.",
-                    "DEPARTURE_RATE": "Departed at least 15 minutes late. Excludes cancellations "
-                    "and unknown departure status; includes flights later diverted.",
-                }[field]
-                + f" Based on {number(summary[denominator])} flights.",
-                border=True,
-            )
+        if task == TASKS[0]:
+            st.subheader("Selection overview")
+            with st.container(key="headline-metrics"):
+                headline_columns = st.columns(4)
+            for col, (name, (field, denominator)) in zip(
+                headline_columns, RATES.items(), strict=True
+            ):
+                col.metric(
+                    {
+                        "Arrival on-time": "On-time arrivals",
+                        "Cancellation": "Cancelled",
+                        "Diversion": "Diverted",
+                        "Departure delay ≥15 min": "Late departures (15+ min)",
+                    }[name],
+                    percent(summary[field]),
+                    help={
+                        "ARRIVAL_RATE": "Arrived less than 15 minutes late. Excludes cancelled "
+                        "and diverted flights and unknown arrival status.",
+                        "CANCELLATION_RATE": "The percentage of scheduled flights "
+                        "that were cancelled.",
+                        "DIVERSION_RATE": "Diverted flights as a percentage "
+                        "of all scheduled flights.",
+                        "DEPARTURE_RATE": "Departed at least 15 minutes late. "
+                        "Excludes cancellations and unknown departure status; "
+                        "includes flights later diverted.",
+                    }[field]
+                    + f" Based on {number(summary[denominator])} flights.",
+                    border=True,
+                )
         st.write(f"**{number(summary['SCHEDULED_ROWS'])} scheduled flights** in your selection")
         if not summary["SCHEDULED_ROWS"]:
             st.info("No flights match these filters. N/A means no result, not 0%.")

@@ -166,3 +166,12 @@ context. Remove small operational reconciliation counts, repeated source/status
 footers and redundant explanatory paragraphs from the dashboard, not from query
 outputs or verification APIs. Retain low-support warnings and the weather scope,
 coverage and noncausal cautions. No metric definitions, filtering or data changes.
+
+## Investigation-specific focus — 2026-11-09
+
+Owner approved showing the four Selection overview cards only on Network & carriers.
+Time & routes, Disruption & recovery and DEN weather retain the date/airline/journey
+summary and scheduled-flight count, then lead with their own analysis. Keep the
+recovery-specific KPI and weather scope/coverage/support safeguards. Remove weather
+copy that refers to the now-absent headline cards. This supersedes the cross-page
+card presentation above; all underlying metrics and query definitions are unchanged.

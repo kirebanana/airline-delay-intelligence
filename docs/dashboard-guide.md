@@ -36,9 +36,9 @@ publish data. One release descriptor is reused throughout each render.
   **Align filters to DEN · January 2025** action explicitly selects the pilot.
   Explore temperature, wind or visibility separately. Inspect departure
   eligibility, cancellations, date support, largest-date concentration and missing
-  matches. Headline rates cover all selected flights; the weather table splits them
+  matches. The flight count covers all selected flights; the weather table splits them
   into condition groups. Selecting a different weather variable does not change
-  the headline population. A two-day selection is explicitly flagged because many
+  the selected population. A two-day selection is explicitly flagged because many
   flights can share only one or two weather events. Changing support thresholds
   reuses the same analytical aggregates. Raw full-pilot/daily diagnostics are not
   shown. This is scheduled weather context, not national weather or a causal explanation.
@@ -48,8 +48,9 @@ publish data. One release descriptor is reused throughout each render.
 Filters apply immediately; **Reset filters** restores baseline dates, all carriers,
 all endpoints, the default support threshold and route grouping. Custom dates are
 authoritative. Travel-date, airline and journey cards identify the queried population.
-The shared **Selection overview** describes that population, so its four rates stay
-the same across investigations unless the filters change. On narrow
+The **Selection overview** cards appear only on Network & carriers. The other
+investigations retain the selection summary and scheduled-flight count, then lead
+with their own comparisons or findings instead of repeating those four rates. On narrow
 screens, open or collapse Streamlit's sidebar to access filters or focus on results.
 
 Chart comparisons use the flights with the information needed for each measure.
