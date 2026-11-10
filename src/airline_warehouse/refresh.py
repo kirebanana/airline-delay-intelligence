@@ -76,9 +76,10 @@ def refresh(
     contract = processing_contract()
     weather = None
     if weather_path is not None:
-        from airline_warehouse.weather import read_weather
+        from airline_warehouse.weather import read_weather, validate_weather_inputs
 
         weather, _ = read_weather(weather_path)
+        validate_weather_inputs(weather, plan["inputs"])
     candidate = None
     if stage == "publish":
         candidate = json.loads(Path(candidate_path).read_text())

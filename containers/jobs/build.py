@@ -15,6 +15,7 @@ files += [root / "src/airline_warehouse/airline_names.json"]
 files += list((root / "tests").glob("*.py"))
 files += [root / "sql/07_publication.sql"]
 files += [root / "references/den-weather-pilot.json"]
+files += [root / "references/den-ghcnh-weather-v2.json"]
 files += [root / "infra/jobs/refresh.asl.json.tftpl"]
 files += [root / "infra/jobs/deliver.py"]
 files += [root / "infra/ingestion/delivery.tf"]

@@ -258,7 +258,9 @@ def query_weather(connection, descriptor, filters, *, development=False, details
                 matched_rows::DOUBLE/NULLIF(scheduled_rows,0) AS coverage,
                 COALESCE(COUNT_IF({v}_match_status='stale'),0) AS stale_rows,
                 COALESCE(COUNT_IF({v}_match_status='no_prior_accepted'),0) AS no_prior_accepted,
-                COALESCE(COUNT_IF({v}_match_status='mapping_or_time'),0) AS mapping_or_time,
+                COALESCE(COUNT_IF({v}_match_status IN ('mapping_or_time',
+                    'ambiguous_local_time','nonexistent_local_time','unresolved_midnight')),0)
+                    AS mapping_or_time,
                 COALESCE(COUNT_IF({v}_newest_status='rejected_qc'),0) AS newest_rejected_qc,
                 COALESCE(COUNT_IF({v}_newest_status='missing'),0) AS newest_missing,
                 COALESCE(COUNT_IF({v}_newest_status='malformed'),0) AS newest_malformed,

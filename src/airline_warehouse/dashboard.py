@@ -36,6 +36,7 @@ from airline_warehouse.dashboard_views import (
     percent_value,
     prior_year,
     sort_comparisons,
+    weather_coverage,
     weather_scope,
     weather_support,
 )
@@ -401,9 +402,9 @@ def disruption(data, minimum):
         st.warning("One of these comparisons is based on fewer flights than your selected minimum.")
 
 
-def weather_view(data, minimum, selected_days=None):
+def weather_view(data, minimum, selected_days=None, coverage=None):
     st.caption(
-        "Weather near each flight's scheduled departure from Denver, January 2025. "
+        "Weather near each flight's scheduled departure from Denver. "
         "Observations are no more than one hour old; cancellations and diversions are included."
     )
     variable = st.selectbox(
@@ -414,6 +415,8 @@ def weather_view(data, minimum, selected_days=None):
             "wind": "Wind (m/s)",
             "visibility": "Visibility (m)",
         }[x],
+        help="Each variable uses its own accepted observation at or before scheduled departure, "
+        "no more than one hour old. Missing weather remains unmatched.",
     )
     st.subheader(f"Departure delays and cancellations by {variable}")
     st.caption("Each row groups selected flights by the weather near their scheduled departure.")
@@ -442,7 +445,13 @@ def weather_view(data, minimum, selected_days=None):
         st.warning(
             f"You selected only {selected_days} days. Each weather group has fewer than "
             "five days of evidence, even if it includes many flights. "
-            "Select the full January 2025 period for a broader comparison."
+            + (
+                f"Select more dates within {coverage.label} for a broader comparison."
+                if coverage and (coverage.end - coverage.start).days + 1 > selected_days
+                else "No broader date window is available in this release."
+                if coverage
+                else "Use more dates within the available weather period, if possible."
+            )
         )
     elif any(not all(weather_support(r, minimum)) for r in rows):
         st.warning(
@@ -517,6 +526,14 @@ def render(reader):
         "period": "All years",
         "group": "route",
     }
+    coverage = weather_coverage(descriptor.get("weather"))
+    if coverage:
+        start, end = max(coverage.start, options["start"]), min(coverage.end, options["end"])
+        coverage = (
+            replace(coverage, start=start, end=end)
+            if start <= end and coverage.origin_id in dict(options["airports"])
+            else None
+        )
 
     def reset():
         for key, value in defaults.items():
@@ -548,12 +565,14 @@ def render(reader):
             st.session_state.origin,
         )
 
-    def pilot():
-        st.session_state.dates = (dt.date(2025, 1, 1), dt.date(2025, 1, 31))
-        st.session_state.origin = 11292
+    def align_weather():
+        if coverage is None:
+            return
+        st.session_state.dates = (coverage.start, coverage.end)
+        st.session_state.origin = coverage.origin_id
         st.session_state.destination = None
         st.session_state.carriers = []
-        st.session_state.period = "2025-01"
+        st.session_state.period = "Custom"
 
     def custom_dates():
         st.session_state.period = "Custom"
@@ -617,8 +636,8 @@ def render(reader):
             help="Groups below this flight count stay in the table but have no chart value. "
             "The count uses flights with the data needed for the selected measure.",
         )
-        if task == TASKS[3]:
-            st.button("Use DEN · January 2025", on_click=pilot)
+        if task == TASKS[3] and coverage:
+            st.button(f"Use DEN · {coverage.label}", on_click=align_weather)
         st.caption(
             "Filters update the results immediately. Choose a preset or enter your own dates."
         )
@@ -644,16 +663,21 @@ def render(reader):
             col.caption(title)
             col.write(value)
     if task == TASKS[3]:
+        if coverage is None:
+            st.warning("Weather data is unavailable: this release has no supported weather scope.")
+            st.stop()
         st.info(
-            "Weather is available for Denver departures in January 2025. "
-            "You can narrow this to an airline, destination or dates within that month."
+            f"Weather is available for Denver departures · {coverage.label}. "
+            "You can narrow this to an airline, destination or dates within that period."
         )
-        if not weather_scope(filters):
+        if not weather_scope(filters, descriptor.get("weather")):
             st.warning(
                 "Your current filters are outside this weather study. "
-                "Select Denver in January 2025 to see matching flight and weather results."
+                f"Select Denver within {coverage.label} to see matching flight and weather results."
             )
-            st.button("Align filters to DEN · January 2025", on_click=pilot, type="primary")
+            st.button(
+                f"Align filters to DEN · {coverage.label}", on_click=align_weather, type="primary"
+            )
             st.stop()
 
     def metrics(f=filters, group="all"):
@@ -834,6 +858,7 @@ def render(reader):
                 ),
                 minimum,
                 selected_days=(filters.end - filters.start).days + 1,
+                coverage=coverage,
             )
         else:
             st.info("Weather data is not available in this dataset.")

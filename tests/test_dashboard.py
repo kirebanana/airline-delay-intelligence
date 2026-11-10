@@ -9,6 +9,23 @@ if importlib.util.find_spec("streamlit"):
 else:
     AppTest = None
 
+LEGACY_WEATHER = {
+    "weather_id": "fixture-only",
+    "contract": "den-isd-aviation-qc15-independent-60m-v1",
+    "origin_id": 11292,
+    "station": "72565003017",
+    "start": "2025-01-01T06:00:00+00:00",
+    "end": "2025-02-01T07:00:00+00:00",
+}
+FULL_PERIOD_WEATHER = {
+    "weather_id": "full-period-fixture-only",
+    "contract": "den-ghcnh-aviation-independent-60m-v2",
+    "origin_id": 11292,
+    "station": "USW00003017",
+    "scope_start": "2023-01-01",
+    "scope_end_exclusive": "2026-01-01",
+}
+
 
 def render(reader):
     from airline_warehouse.dashboard import render as dashboard
@@ -93,6 +110,46 @@ class FixtureReader:
                 "UNKNOWN_DEPARTURE": 0,
             }
         ]
+
+
+class ReleasedWeatherReader(FixtureReader):
+    def __init__(self, manifest=None):
+        self.manifest = FULL_PERIOD_WEATHER if manifest is None else manifest
+        self.weather_filters = []
+
+    def pin(self):
+        return {
+            **super().pin(),
+            "development": False,
+            "release_id": "offline-ui-fixture",
+            "weather": self.manifest,
+        }
+
+    def options(self, descriptor):
+        return {
+            **super().options(descriptor),
+            "start": dt.date(2023, 1, 1),
+            "end": dt.date(2025, 12, 31),
+        }
+
+    def weather(self, descriptor, filters, *, details=True):
+        assert not details, "Dashboard must not request raw weather diagnostics"
+        self.weather_filters.append(filters)
+        return {
+            "selected_coverage": [],
+            "comparisons": [
+                {
+                    "VARIABLE": "temperature",
+                    "BAND": "Unmatched",
+                    "LOCAL_DATES": 1,
+                    "SCHEDULED_ROWS": 10,
+                    "DEPARTURE_DENOMINATOR": 8,
+                    "DEPARTURE_DELAY_RATE": 0.25,
+                    "CANCELLATION_RATE": 0.1,
+                    "LARGEST_DATE_SHARE": 1,
+                }
+            ],
+        }
 
 
 @unittest.skipUnless(AppTest is not None, "Install the pinned analytics extra for AppTest")
@@ -191,7 +248,7 @@ class DashboardTests(unittest.TestCase):
     def test_fixed_weather_scope_coverage_and_empty_non_den_filters(self):
         class WeatherReader(FixtureReader):
             def pin(self):
-                return {**super().pin(), "weather": {"weather_id": "fixture-only"}}
+                return {**super().pin(), "weather": LEGACY_WEATHER}
 
             def weather(self, descriptor, filters, *, details=True):
                 if details:
@@ -225,6 +282,7 @@ class DashboardTests(unittest.TestCase):
         app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
         self.assertTrue(any("only 2 days" in w.value for w in app.warning))
+        self.assertTrue(any("No broader date window" in w.value for w in app.warning))
         self.assertEqual(len(app.expander), 0)
         self.assertEqual(len(app.checkbox), 0)
         self.assertEqual(len(app.metric), 0)
@@ -237,6 +295,140 @@ class DashboardTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
         self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+
+    def test_released_full_period_weather_alignment_narrowing_and_reset(self):
+        reader = ReleasedWeatherReader()
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        self.assertEqual(reader.weather_filters, [])
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+        next(b for b in app.button if b.label == "Align filters to DEN · 2023–2025").click().run()
+        self.assertFalse(app.exception)
+        self.assertFalse(app.error)
+        self.assertEqual(
+            app.date_input(key="dates").value, (dt.date(2023, 1, 1), dt.date(2025, 12, 31))
+        )
+        self.assertEqual(app.selectbox(key="origin").value, 11292)
+        self.assertFalse(any("UNPUBLISHED" in w.value for w in app.warning))
+        self.assertEqual(len(app.metric), 0)
+        self.assertEqual(len(app.expander), 0)
+        self.assertEqual(len(app.get("vega_lite_chart")), 0)
+        self.assertTrue(any("10 scheduled flights" in m.value for m in app.markdown))
+        self.assertIn("TRAVEL DATES", [c.value for c in app.caption])
+        app.date_input(key="dates").set_value((dt.date(2024, 2, 28), dt.date(2024, 2, 29))).run()
+        app.multiselect(key="carriers").set_value([19393]).run()
+        app.selectbox(key="destination").set_value(14771).run()
+        self.assertEqual(reader.weather_filters[-1].start, dt.date(2024, 2, 28))
+        self.assertEqual(reader.weather_filters[-1].end, dt.date(2024, 2, 29))
+        self.assertEqual(reader.weather_filters[-1].carriers, (19393,))
+        self.assertEqual(reader.weather_filters[-1].destination, 14771)
+        warnings = " ".join(w.value for w in app.warning)
+        self.assertIn("only 2 days", warnings)
+        self.assertIn("within 2023–2025", warnings)
+        self.assertNotIn("January", warnings)
+        self.assertTrue(any("do not prove" in c.value for c in app.caption))
+        app.button(key="reset").click().run()
+        self.assertIsNone(app.selectbox(key="origin").value)
+        self.assertIsNone(app.selectbox(key="destination").value)
+        self.assertEqual(app.multiselect(key="carriers").value, [])
+        self.assertEqual(
+            app.date_input(key="dates").value, (dt.date(2023, 1, 1), dt.date(2025, 12, 31))
+        )
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+        app.radio(key="task").set_value("Time & routes").run()
+        self.assertEqual(app.radio(key="group").value, "route")
+
+    def test_legacy_release_alignment_stays_january_despite_full_flight_dates(self):
+        reader = ReleasedWeatherReader(LEGACY_WEATHER)
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        next(b for b in app.button if b.label == "Use DEN · January 2025").click().run()
+        self.assertFalse(app.error)
+        self.assertEqual(
+            app.date_input(key="dates").value, (dt.date(2025, 1, 1), dt.date(2025, 1, 31))
+        )
+        calls = len(reader.weather_filters)
+        app.selectbox(key="period").set_value("2024").run()
+        self.assertEqual(len(reader.weather_filters), calls)
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+        self.assertEqual(len(app.dataframe), 0)
+
+    def test_unsupported_weather_metadata_has_no_alignment_or_weather_queries(self):
+        for manifest in [
+            {},
+            {"weather_id": "fixture-only"},
+            {**FULL_PERIOD_WEATHER, "contract": "unknown"},
+            {**FULL_PERIOD_WEATHER, "scope_start": "not-a-date"},
+            {**FULL_PERIOD_WEATHER, "scope_end_exclusive": "2027-01-01"},
+            {k: v for k, v in FULL_PERIOD_WEATHER.items() if k != "scope_start"},
+        ]:
+            with self.subTest(manifest=manifest):
+                reader = ReleasedWeatherReader(manifest)
+                app = AppTest.from_function(render, args=(reader,)).run()
+                app.radio(key="task").set_value("DEN weather investigation").run()
+                app.selectbox(key="origin").set_value(11292).run()
+                self.assertFalse(app.exception)
+                self.assertTrue(any("no supported weather scope" in w.value for w in app.warning))
+                self.assertFalse(any("DEN ·" in b.label for b in app.button))
+                self.assertEqual(reader.weather_filters, [])
+                self.assertEqual(len(app.dataframe), 0)
+
+    def test_alignment_uses_narrower_released_weather_not_all_flight_dates(self):
+        reader = ReleasedWeatherReader(
+            {
+                **FULL_PERIOD_WEATHER,
+                "scope_start": "2024-02-01",
+                "scope_end_exclusive": "2024-03-01",
+            }
+        )
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        next(b for b in app.button if b.label == "Use DEN · February 2024").click().run()
+        self.assertFalse(app.error)
+        self.assertEqual(
+            app.date_input(key="dates").value, (dt.date(2024, 2, 1), dt.date(2024, 2, 29))
+        )
+        calls = len(reader.weather_filters)
+        app.selectbox(key="period").set_value("All years").run()
+        self.assertEqual(len(reader.weather_filters), calls)
+        self.assertTrue(any("outside this weather study" in w.value for w in app.warning))
+
+    def test_weather_alignment_intersects_flight_coverage_and_requires_den(self):
+        class ShortFlightReader(ReleasedWeatherReader):
+            def pin(self):
+                return {**super().pin(), "release_id": "short-flight-ui-fixture"}
+
+            def options(self, descriptor):
+                return {
+                    **super().options(descriptor),
+                    "start": dt.date(2024, 6, 1),
+                    "end": dt.date(2024, 6, 2),
+                }
+
+        reader = ShortFlightReader()
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        next(b for b in app.button if b.label.startswith("Use DEN ·")).click().run()
+        self.assertFalse(app.exception)
+        self.assertFalse(app.error)
+        self.assertEqual(
+            app.date_input(key="dates").value, (dt.date(2024, 6, 1), dt.date(2024, 6, 2))
+        )
+        self.assertTrue(any("No broader date window" in w.value for w in app.warning))
+
+        class NonDenReader(ReleasedWeatherReader):
+            def pin(self):
+                return {**super().pin(), "release_id": "non-den-ui-fixture"}
+
+            def options(self, descriptor):
+                return {**super().options(descriptor), "airports": [(14771, "SFO")]}
+
+        reader = NonDenReader()
+        app = AppTest.from_function(render, args=(reader,)).run()
+        app.radio(key="task").set_value("DEN weather investigation").run()
+        self.assertFalse(app.exception)
+        self.assertFalse(any("DEN ·" in b.label for b in app.button))
+        self.assertEqual(reader.weather_filters, [])
 
     def test_categories_and_recovery_explain_populations_without_causal_claims(self):
         app = AppTest.from_function(render, args=(FixtureReader(),)).run()

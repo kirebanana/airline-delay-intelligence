@@ -63,7 +63,15 @@ def processing_contract():
         if p.is_file() and p.suffix in (".sql", ".yml") and not set(p.parts) & {"target", "logs"}:
             digest.update(str(p.relative_to(project)).encode())
             digest.update(p.read_bytes())
-    for name in ("dbt_runner.py", "deadlines.py", "weather.py", "execution.py", "connection.py"):
+    for name in (
+        "dbt_runner.py",
+        "deadlines.py",
+        "weather.py",
+        "ghcnh.py",
+        "weather_contract.py",
+        "execution.py",
+        "connection.py",
+    ):
         digest.update(name.encode())
         digest.update((Path(__file__).parent / name).read_bytes())
     digest.update((project.parent / "uv.lock").read_bytes())
@@ -88,11 +96,10 @@ def build_candidate(
     plan = candidate_plan(manifests, schema)
     weather = None
     if weather_path is not None:
-        from airline_warehouse.weather import read_weather
+        from airline_warehouse.weather import read_weather, validate_weather_inputs
 
         weather, _ = read_weather(weather_path)
-        if "2025-01" not in plan["inputs"]:
-            raise ValueError("The required weather pilot needs the selected January BTS input")
+        validate_weather_inputs(weather, plan["inputs"])
     project = Path(__file__).resolve().parents[2] / "dbt"
     contract = processing_contract()
     output.mkdir(parents=True)
@@ -164,6 +171,11 @@ def build_candidate(
                         f"CREATE VIEW AIRLINE_DB.{schema}.SELECTED_WEATHER AS "
                         f"SELECT record FROM {weather_table}"
                     )
+            from airline_warehouse.weather import weather_variables
+
+            variables = {"expected_rows": plan["expected_rows"], "weather_enabled": False}
+            if weather is not None:
+                variables.update(weather_variables(weather))
             command = [
                 sys.executable,
                 "-m",
@@ -178,9 +190,7 @@ def build_candidate(
                 "--log-path",
                 str(output / "logs"),
                 "--vars",
-                json.dumps(
-                    {"expected_rows": plan["expected_rows"], "weather_enabled": weather is not None}
-                ),
+                json.dumps(variables),
             ]
             if "AIRLINE_CLOUD_IDENTITY" in env:
                 command.extend(["--target", "cloud"])

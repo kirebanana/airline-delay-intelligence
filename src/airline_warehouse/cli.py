@@ -36,14 +36,23 @@ def main(argv=None):
     p = sub.add_parser("prepare-weather", help="Prepare exact bounded local NOAA CSV imports")
     p.add_argument("--source", nargs=2, action="append", required=True, metavar=("PATH", "SHA256"))
     p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser(
+        "prepare-ghcnh-weather", help="Prepare four explicit checksummed GHCNh PSV imports"
+    )
+    p.add_argument("--source", nargs=2, action="append", required=True, metavar=("PATH", "SHA256"))
+    p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("build", help="Create and test an isolated dbt candidate; never publish")
-    p.add_argument("--weather", type=Path, help="Explicit compatible prepared DEN ISD dependency")
+    p.add_argument(
+        "--weather", type=Path, help="Explicit versioned prepared DEN weather dependency"
+    )
     p.add_argument("--artifact", type=Path, action="append", required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--budget-state", type=Path, required=True)
     p.add_argument("--funding-verified", action="store_true")
     p = sub.add_parser("refresh", help="Finite prepared-input refresh or explicit stage rerun")
-    p.add_argument("--weather", type=Path, help="Explicit compatible prepared DEN ISD dependency")
+    p.add_argument(
+        "--weather", type=Path, help="Explicit versioned prepared DEN weather dependency"
+    )
     p.add_argument("--artifact", type=Path, action="append", required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--budget-state", type=Path, required=True)
@@ -86,6 +95,10 @@ def main(argv=None):
             from airline_warehouse.weather import prepare_weather
 
             result = prepare_weather(args.source, args.output)
+        elif args.command == "prepare-ghcnh-weather":
+            from airline_warehouse.ghcnh import prepare_ghcnh
+
+            result = prepare_ghcnh(args.source, args.output)
         elif args.command == "refresh":
             if not args.funding_verified:
                 raise ValueError("Explicit funded workload approval is required before refresh")

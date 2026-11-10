@@ -23,5 +23,12 @@ class BuildContextTests(unittest.TestCase):
             self.assertEqual([p.name for p in resources], ["airline_names.json"])
             data = json.loads(resources[0].read_text())
             self.assertEqual(data["airlines"]["20368"]["name"], "Allegiant Air")
+            references = Path(directory) / "references"
+            self.assertEqual(
+                sorted(p.name for p in references.glob("*.json")),
+                ["den-ghcnh-weather-v2.json", "den-weather-pilot.json"],
+            )
+            weather = json.loads((references / "den-ghcnh-weather-v2.json").read_text())
+            self.assertEqual(weather["station"], "USW00003017")
             docker.assert_called_once()
             self.assertEqual(docker.call_args.args[0][-1], directory)
