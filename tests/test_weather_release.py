@@ -158,6 +158,12 @@ class WeatherReleaseTests(unittest.TestCase):
         data["weather_id"] = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
         (path / "manifest.json").write_text(json.dumps(data))
         (path / "observations.jsonl").write_text(payload)
+        # Explicit independent trust boundary for this synthetic source fixture.
+        from airline_warehouse.weather_trust import TRUSTED
+
+        trust = patch.dict(TRUSTED, data, clear=True)
+        trust.start()
+        self.addCleanup(trust.stop)
         return data
 
     def test_real_artifact_read_exact_replay_and_changed_raw_refusal(self):
@@ -293,7 +299,23 @@ class WeatherReleaseTests(unittest.TestCase):
                 json.dumps(data, sort_keys=True).encode()
             ).hexdigest()
             (path / "manifest.json").write_text(json.dumps(data))
-            with self.assertRaisesRegex(ValueError, "decoding mismatch"):
+            with self.assertRaisesRegex(ValueError, "reviewed source-derived"):
+                read_weather(path)
+
+    def test_coordinated_raw_value_and_manifest_rehash_is_not_trusted(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LIMITS):
+            path = Path(tmp)
+            data = self.write_artifact(path)
+            payload = (path / "observations.jsonl").read_text()
+            payload = payload.replace('"value":1', '"value":2').replace('"raw":"1"', '"raw":"2"')
+            (path / "observations.jsonl").write_text(payload)
+            data["payload_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
+            data.pop("weather_id")
+            data["weather_id"] = hashlib.sha256(
+                json.dumps(data, sort_keys=True).encode()
+            ).hexdigest()
+            (path / "manifest.json").write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, "reviewed source-derived"):
                 read_weather(path)
 
     def test_frozen_oracle_rejects_guessed_fold_and_invalid_mapping(self):
@@ -325,7 +347,8 @@ class WeatherReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LIMITS):
             path = Path(tmp)
             data = self.write_artifact(path)
-            records = (path / "observations.jsonl").read_text().splitlines()
+            # Database return order is unspecified; digest canonical observation order.
+            records = (path / "observations.jsonl").read_text().splitlines()[::-1]
             anchor = (
                 "2023-11-05",
                 "0119",

@@ -136,7 +136,10 @@ class ReleasedWeatherReader(FixtureReader):
         assert not details, "Dashboard must not request raw weather diagnostics"
         self.weather_filters.append(filters)
         return {
-            "selected_coverage": [],
+            "selected_coverage": [
+                {"VARIABLE": variable, "SCHEDULED_ROWS": 10, "MATCHED_ROWS": 8}
+                for variable in ("temperature", "wind", "visibility")
+            ],
             "comparisons": [
                 {
                     "VARIABLE": "temperature",
@@ -282,7 +285,6 @@ class DashboardTests(unittest.TestCase):
         app.selectbox(key="origin").set_value(11292).run()
         self.assertFalse(app.exception)
         self.assertTrue(any("only 2 days" in w.value for w in app.warning))
-        self.assertTrue(any("No broader date window" in w.value for w in app.warning))
         self.assertEqual(len(app.expander), 0)
         self.assertEqual(len(app.checkbox), 0)
         self.assertEqual(len(app.metric), 0)
@@ -313,6 +315,17 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(len(app.metric), 0)
         self.assertEqual(len(app.expander), 0)
         self.assertEqual(len(app.get("vega_lite_chart")), 0)
+        self.assertEqual(len(app.dataframe), 1)
+        self.assertEqual(
+            list(app.dataframe[0].value.columns),
+            ["Band", "Departure delayed", "Cancelled", "Scheduled", "Dates", "Support"],
+        )
+        self.assertTrue(
+            any(
+                "Weather matched for 80.0%" in c.value and "2 without a match" in c.value
+                for c in app.caption
+            )
+        )
         self.assertTrue(any("10 scheduled flights" in m.value for m in app.markdown))
         self.assertIn("TRAVEL DATES", [c.value for c in app.caption])
         app.date_input(key="dates").set_value((dt.date(2024, 2, 28), dt.date(2024, 2, 29))).run()
@@ -324,9 +337,8 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(reader.weather_filters[-1].destination, 14771)
         warnings = " ".join(w.value for w in app.warning)
         self.assertIn("only 2 days", warnings)
-        self.assertIn("within 2023–2025", warnings)
         self.assertNotIn("January", warnings)
-        self.assertTrue(any("do not prove" in c.value for c in app.caption))
+        self.assertTrue(any("not proof" in c.value for c in app.caption))
         app.button(key="reset").click().run()
         self.assertIsNone(app.selectbox(key="origin").value)
         self.assertIsNone(app.selectbox(key="destination").value)
@@ -414,7 +426,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(
             app.date_input(key="dates").value, (dt.date(2024, 6, 1), dt.date(2024, 6, 2))
         )
-        self.assertTrue(any("No broader date window" in w.value for w in app.warning))
+        self.assertTrue(any("only 2 days" in w.value for w in app.warning))
 
         class NonDenReader(ReleasedWeatherReader):
             def pin(self):

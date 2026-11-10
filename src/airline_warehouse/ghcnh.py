@@ -311,6 +311,9 @@ def read_ghcnh(path):
     """Verify immutable artifact; return (manifest, JSONL string rows), like v1."""
     path = Path(path)
     manifest = json.loads((path / "manifest.json").read_text())
+    from airline_warehouse.weather_trust import verify_trusted_weather
+
+    verify_trusted_weather(manifest)
     verify_mapping(manifest)
     sources = manifest.get("sources", [])
     if len(sources) != 4 or [s.get("year") for s in sources] != [2023, 2024, 2025, 2026]:
