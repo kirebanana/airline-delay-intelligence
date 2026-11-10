@@ -219,13 +219,29 @@ including rejection of QC-unknown source 999. They must be disclosed and explain
 not “fixed” by trusting undocumented source/QC or accepting SYNOP reports. The
 approved numeric threshold is >=95% **overall** per variable, with monthly/subgroup
 diagnostics; no monthly threshold waiver is implied. Qualified visibility rejects
-31 in-envelope reports across the inputs. A direct January GHCNh-versus-ISD flight
-comparison belongs to the matching/release slice; source scaling, source-specific
-QC, retained censoring, accepted-good A, and independent report selection explain
-why identical January values or counts are not assumed.
+31 in-envelope reports across the inputs. The completed
+[January GHCNh-versus-ISD reconciliation](../weather-january-source-reconciliation.md)
+records the exact flight-level match/time/value/band effects; identical January
+values or counts are not assumed.
 
 Offline fixtures cover units, per-variable report independence, source-specific
 QC (especially 223 QC5), measurement codes, qualified visibility, invalid identity,
 UTC bounds, duplicate preservation/conflicts, stream bounds/truncation/order,
 create-only artifacts, deterministic replay/tampering, legacy scope and DST gap/fold
 classification. No source download occurs in tests.
+
+## Prepared-content trust
+
+The fixed-source contract accepts only the reviewed prepared-content identity in
+`src/airline_warehouse/weather_trust.py`, separate from artifact-supplied manifests
+and the unchanged mapping reference. Its payload was reproduced offline from all
+four checksum-pinned original NOAA bodies: 120,708 rows, 83,671,259 bytes, SHA256
+`720a533904bcf5829cf1071219743b54366f92bcc777f16007f90edba6ca7d76`.
+Artifact readers and frozen validation check that trusted identity as well as actual
+record bytes; re-decoding preserved fields is an additional check, not evidence
+that those fields came from NOAA. Coordinated raw/value/manifest rehashes fail closed.
+
+Corrected sources or preparation semantics require a separately reviewed trust
+update supported by reconstruction from pinned source bytes. A freshly self-signed
+manifest cannot authorize itself. This policy does not change legacy ISD handling,
+the existing GHCNh mapping hash, payload or published release.

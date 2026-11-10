@@ -43,9 +43,10 @@ publish data. One release descriptor is reused throughout each render.
   clearing airline and destination filters. Unknown contracts, missing scope metadata
   for the new contract, or malformed dates disable weather results and alignment;
   flight coverage alone never establishes weather coverage.
-  Explore temperature, wind or visibility separately. Inspect departure
-  eligibility, cancellations, date support, largest-date concentration and missing
-  matches. The flight count covers all selected flights; the weather table splits them
+  Explore temperature, wind or visibility separately in one compact comparison:
+  departure delays, cancellations, scheduled flights and date support. A short
+  caption gives matching coverage and unmatched flights, without a second table.
+  The flight count covers all selected flights; the weather table splits them
   into condition groups. Selecting a different weather variable does not change
   the selected population. A two-day selection is explicitly flagged because many
   flights can share only one or two weather events. Changing support thresholds

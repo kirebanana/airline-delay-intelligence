@@ -265,6 +265,11 @@ class ArtifactTests(unittest.TestCase):
                 patch.object(ghcnh, "reference", return_value=fixture_ref),
             ):
                 first = ghcnh.prepare_ghcnh(sources, root / "first")
+                from airline_warehouse.weather_trust import TRUSTED
+
+                trust = patch.dict(TRUSTED, first, clear=True)
+                trust.start()
+                self.addCleanup(trust.stop)
                 second = ghcnh.prepare_ghcnh(sources, root / "second")
                 self.assertEqual(first, second)
                 self.assertEqual(first["contract"], CONTRACT)

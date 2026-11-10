@@ -17,6 +17,8 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from airline_warehouse.weather_trust import verify_trusted_weather
+
 STATION = "72565003017"
 START = dt.datetime(2025, 1, 1, 6, tzinfo=dt.UTC)
 END = dt.datetime(2025, 2, 1, 7, tzinfo=dt.UTC)
@@ -308,6 +310,8 @@ def prepare_weather(sources, output):
 def read_weather(path):
     path = Path(path)
     manifest = json.loads((path / "manifest.json").read_text())
+    if manifest.get("contract") == GHCNH_CONTRACT:
+        verify_trusted_weather(manifest)
     claimed = manifest.pop("weather_id")
     actual = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
     manifest["weather_id"] = claimed
@@ -459,6 +463,17 @@ def observation_index(records):
 
 def validate_v2_records(manifest, records):
     """Re-decode preserved GHCNh fields, not the claimed normalized values."""
+    verify_trusted_weather(manifest)
+    digest = hashlib.sha256()
+    for record in records:
+        encoded = (
+            record
+            if isinstance(record, str)
+            else json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        )
+        digest.update((encoded + "\n").encode())
+    if digest.hexdigest() != manifest["payload_sha256"]:
+        raise ValueError("Preserved weather differs from trusted source-derived content")
     from airline_warehouse.ghcnh import (
         BASE_URL,
         MAX_PAYLOAD_BYTES,
@@ -561,6 +576,8 @@ def oracle_match(index, variable, anchor, anchor_status="resolved"):
 
 def validate_frozen_weather(connection, schema, manifest):
     """Complete input digest, field reconstruction, backward join and all-row gates."""
+    if manifest.get("contract") == GHCNH_CONTRACT:
+        verify_trusted_weather(manifest)
     scope = weather_scope(manifest)
     identity = {k: v for k, v in manifest.items() if k != "weather_id"}
     if hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest() != manifest.get(
@@ -595,7 +612,7 @@ def validate_frozen_weather(connection, schema, manifest):
         if manifest["contract"] == GHCNH_CONTRACT:
             if payload_bytes != manifest["payload_bytes"]:
                 raise ValueError("Frozen weather payload size mismatch")
-            validate_v2_records(manifest, records)
+            validate_v2_records(manifest, ordered)
         for model in ("weather_observations", "den_weather"):
             expected = render_weather_sql(model, schema, manifest)
             cur.execute(

@@ -403,10 +403,6 @@ def disruption(data, minimum):
 
 
 def weather_view(data, minimum, selected_days=None, coverage=None):
-    st.caption(
-        "Weather near each flight's scheduled departure from Denver. "
-        "Observations are no more than one hour old; cancellations and diversions are included."
-    )
     variable = st.selectbox(
         "Weather variable",
         ["temperature", "wind", "visibility"],
@@ -432,51 +428,27 @@ def weather_view(data, minimum, selected_days=None, coverage=None):
                 "Departure delayed": percent_value(r["DEPARTURE_DELAY_RATE"]),
                 "Cancelled": percent_value(r["CANCELLATION_RATE"]),
                 "Scheduled": r["SCHEDULED_ROWS"],
-                "Departure eligible": r["DEPARTURE_DENOMINATOR"],
                 "Dates": r["LOCAL_DATES"],
-                "Largest date": percent_value(r["LARGEST_DATE_SHARE"]),
-                "Support": "Limited data"
-                if not all((dates, schedules, departures))
-                else "Enough flights/dates",
+                "Support": "Limited" if not all((dates, schedules, departures)) else "Sufficient",
             }
         )
     table(display)
     if rows and selected_days is not None and selected_days < 5:
         st.warning(
-            f"You selected only {selected_days} days. Each weather group has fewer than "
-            "five days of evidence, even if it includes many flights. "
-            + (
-                f"Select more dates within {coverage.label} for a broader comparison."
-                if coverage and (coverage.end - coverage.start).days + 1 > selected_days
-                else "No broader date window is available in this release."
-                if coverage
-                else "Use more dates within the available weather period, if possible."
-            )
+            f"You selected only {selected_days} days. "
+            "Use a longer period for a stronger comparison."
         )
     elif any(not all(weather_support(r, minimum)) for r in rows):
-        st.warning(
-            f"Some conditions have fewer than five days of data or fewer than {minimum:,} "
-            "flights with the needed information. Treat these comparisons with extra care."
-        )
-    st.caption(
-        "Check the number of days and the busiest day's share: many flights may come from "
-        "a single weather event. Different airlines, routes and schedules also affect results. "
-        "These comparisons do not prove weather caused a delay or cancellation."
-    )
-    st.subheader("How many flights have weather data?")
+        st.warning("Some conditions have limited data; compare them with care.")
+    st.caption("These comparisons show associations, not proof that weather caused a disruption.")
     coverage = [r for r in data["selected_coverage"] if r["VARIABLE"] == variable]
-    table(
-        [
-            {
-                "Flight status": "Cancelled" if r["CANCELLED"] else "Not cancelled",
-                "Scheduled": r["SCHEDULED_ROWS"],
-                "Matched": r["MATCHED_ROWS"],
-                "Coverage": percent_value(r["COVERAGE"]),
-                "Unmatched": r["SCHEDULED_ROWS"] - r["MATCHED_ROWS"],
-            }
-            for r in coverage
-        ]
-    )
+    total = sum(r["SCHEDULED_ROWS"] for r in coverage)
+    matched = sum(r["MATCHED_ROWS"] for r in coverage)
+    if total:
+        st.caption(
+            f"Weather matched for {matched / total:.1%} of selected flights "
+            f"· {number(total - matched)} without a match."
+        )
 
 
 def render(reader):
