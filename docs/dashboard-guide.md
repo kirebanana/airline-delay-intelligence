@@ -1,5 +1,7 @@
 # Exploring the dashboard
 
+For full-period source coverage and limitations, see [Denver weather 2023–2025](weather-2023-2025.md).
+
 The dashboard is a local Streamlit application backed by the existing published
 Snowflake release. Use the protected reader configuration and launch instructions
 in the [README](../README.md). Opening the dashboard does not ingest, refresh or

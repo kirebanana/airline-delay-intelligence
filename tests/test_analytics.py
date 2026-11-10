@@ -59,6 +59,8 @@ class AnalyticalRequestTests(unittest.TestCase):
         self.assertEqual(len(c.sql), 6)
         self.assertEqual(core["daily"], [])
         self.assertEqual(core["pilot_coverage"], [])
+        self.assertTrue(any("'ambiguous_local_time'" in sql for sql in c.sql))
+        self.assertTrue(any("'nonexistent_local_time'" in sql for sql in c.sql))
         c.sql.clear()
         query_weather(c, descriptor, filters, details=True)
         self.assertEqual(len(c.sql), 12)
