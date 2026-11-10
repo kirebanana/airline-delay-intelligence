@@ -376,8 +376,22 @@ def load_weather(connection, path):
         if not existing:
             cur.execute("BEGIN TRANSACTION")
             try:
-                for start in range(0, len(rows), 200):
-                    batch = rows[start : start + 200]
+                # Bound each VALUES request by both records and encoded payload.
+                # v2 provenance is larger than the pilot; avoid hundreds of remote
+                # round trips without allowing an unbounded SQL request.
+                batches, batch, batch_bytes = [], [], 0
+                for row in rows:
+                    size = len(row.encode())
+                    if size > 2_000_000:
+                        raise ValueError("Weather record exceeds the bounded insert envelope")
+                    if batch and (len(batch) >= 2000 or batch_bytes + size > 2_000_000):
+                        batches.append(batch)
+                        batch, batch_bytes = [], 0
+                    batch.append(row)
+                    batch_bytes += size
+                if batch:
+                    batches.append(batch)
+                for batch in batches:
                     cur.execute(
                         f"INSERT INTO {table} SELECT column1 FROM VALUES "
                         + ",".join(["(%s)"] * len(batch)),

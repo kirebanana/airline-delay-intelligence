@@ -112,6 +112,19 @@ class ReplayConnection:
 
 
 class WeatherReleaseTests(unittest.TestCase):
+    def test_insert_batches_have_record_and_payload_bounds(self):
+        for rows, expected in [(["x"] * 4001, 3), (["x" * 600000] * 7, 3)]:
+            data = {"contract": GHCNH_CONTRACT, "weather_id": "a" * 64}
+            connection = ReplayConnection()
+            with (
+                patch("airline_warehouse.weather.read_weather", return_value=(data, rows)),
+                patch.dict(os.environ, {**LIMITS, "AIRLINE_WEATHER_MAX_OBSERVATIONS": "5000"}),
+            ):
+                load_weather(connection, Path("unused"))
+            inserts = [s for s in connection.statements if s.startswith("INSERT INTO")]
+            self.assertEqual(len(inserts), expected)
+            self.assertEqual(connection.rows, rows)
+
     def write_artifact(self, path):
         rows = [
             record(v, "2023-01-01T06:00:00+00:00", 1) for v in ("temperature", "visibility", "wind")
