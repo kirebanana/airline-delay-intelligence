@@ -1,9 +1,17 @@
 # Acceptance evidence map
 
-**Status: final validation in progress; not a completion or owner-acceptance claim.**
+**Evidence index, updated 2026-11-14; not an independent owner-acceptance claim.**
 The approved [specification](specifications/airline-delay-intelligence.md#t05-final-prd-acceptance-mapping)
 defines the acceptance outcomes. This index maps implementation evidence and
 remaining gates without weakening those outcomes.
+
+Resource availability is tracked separately in [resource lifecycle](resource-lifecycle.md).
+The owner approved teardown on November 14; runtime retention claims below describe
+the qualification checkpoints, not resources that remain deployed today. Later
+[full-period weather evidence](weather-2023-2025.md) and its
+[January source reconciliation](weather-january-source-reconciliation.md) supersede
+the original pilot-only analytical scope. The UI now presents four investigations,
+not the earlier six navigation views.
 
 The reviewed [delivery qualification summary](evidence/delivery-qualification.json)
 records the latest checkpoint. The earlier [qualification snapshot](evidence/qualification-summary.json)
@@ -25,7 +33,8 @@ or owner-acceptance statement.
 
 - The owner confirmed intentional public visibility on 2026-11-03 and authorized
   publication after a secrets/state/sensitive-evidence audit. This prerequisite is
-  resolved; actual protected delivery still requires qualification.
+  resolved; actual protected delivery was subsequently qualified, including the
+  November 10 run linked from [delivery](delivery.md).
 - Three Snowflake user imports completed under the owner-controlled boundary on
   November 4; keys/defaults/grants/parameters remained unchanged, and the official
   normal plan is clean. The pinned provider still cannot read the account-monitor
@@ -55,8 +64,10 @@ presentation preparation can continue while they are unresolved.
 - **19:** Consolidated evidence is ready for owner review, **not full acceptance**:
   AC-01 still has the attachment coverage/refresh-metadata exceptions described above, and known
   image findings/funding limits remain disclosed.
-- **20:** Presentation, diagrams, sanitized evidence and cleanup proposal are prepared.
-  Owner walkthrough/acceptance remains outstanding; no destructive cleanup performed.
+- **20:** Presentation guidance, diagrams and sanitized evidence are retained.
+  Approved destructive teardown began November 14; remaining resources and permission
+  blockers are recorded separately. Teardown approval is not a waiver of the
+  provider/security exceptions above.
 
 The prior platform/application no-change evidence covers 53/four instances. The
 November 4 owner import has an official-provider normal no-change plan covering

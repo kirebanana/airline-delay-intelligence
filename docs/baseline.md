@@ -1,5 +1,10 @@
 # Complete baseline preparation and validation
 
+This document records the November 1 baseline qualification. The later
+[Denver GHCNh extension](weather-2023-2025.md) supersedes its January-only weather
+scope. [Resource lifecycle](resource-lifecycle.md) records current availability;
+references below to readable releases are observations from the recorded runs.
+
 **2026-11-01: ticket14 implementation qualified.** The
 presenter now selects all36months of2023–2025 together with the fixed weather
 pilot. Both the deliberately incomplete35-month release and ordinary36-month

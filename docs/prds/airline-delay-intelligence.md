@@ -1,5 +1,12 @@
 # Airline Delay Intelligence — Product Requirements Document
 
+The approved [Denver weather amendment](den-weather-2023-2025.md) extends the
+original January pilot below to 2023–2025. The later
+[dashboard specification](../specifications/dashboard-product-improvements.md)
+organizes the analytical areas into four investigations. Original approval text is
+retained; [resource lifecycle](../resource-lifecycle.md) tracks deployed availability
+separately from requirements and dated acceptance evidence.
+
 | Field | Value |
 | --- | --- |
 | Status | **Approved** |

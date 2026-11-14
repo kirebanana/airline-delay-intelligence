@@ -1,5 +1,10 @@
 # Finite cloud jobs: qualification status
 
+**Lifecycle update, 2026-11-14:** Execution and image resources have been removed
+under approved teardown; owner-only remnants are listed in
+[resource lifecycle](resource-lifecycle.md). Qualification results below describe
+historical runs, not currently active tasks, images or workflows.
+
 **Status: complete positive-cloud path and replay qualified; final delivery/recovery
 acceptance in progress, 2026-11-03.**
 This is implementation evidence, not final acceptance of tickets 16–20 or a new
@@ -220,8 +225,8 @@ occurring S3 service outage or data-capable retry. It launches no ECS/SQL/servic
 task and adds no service/schedule. Production remains retry-free for data tasks.
 The existing client-death probe separately qualifies the real SQL server timeout.
 
-Snowflake static state is remote, but three user imports and account-attachment
-coverage remain [explicitly deferred](snowflake-adoption-gap.md), without blocking
-unrelated delivery. Final owner acceptance/walkthrough is still required. The
-presentation and non-destructive cleanup proposal are prepared; no infrastructure,
-state, artifact, accepted data or release deletion is authorized or performed.
+All three Snowflake service-user imports subsequently completed on November 4;
+account-attachment provider coverage and last-login metadata exceptions remain
+[explicitly documented](snowflake-adoption-gap.md). The later GHCNh extension
+was built locally; `cloud_selection.py` retains the original ISD-only transport
+boundary. November 14 teardown status is separate from these qualification results.

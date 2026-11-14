@@ -1,5 +1,9 @@
 # Exploring the dashboard
 
+Live availability and required provisioning are tracked in
+[resource lifecycle](resource-lifecycle.md). This guide describes the implemented UI;
+it is not a claim that a hosted dashboard is running.
+
 For full-period source coverage and limitations, see [Denver weather 2023–2025](weather-2023-2025.md).
 
 The dashboard is a local Streamlit application backed by the existing published
@@ -35,8 +39,9 @@ publish data. One release descriptor is reused throughout each render.
   positive improvement.
 - **DEN weather investigation:** **Use DEN · [available period]** selects Denver
   and the weather dates in the pinned release, intersected with available flight dates.
-  The approved GHCNh extension supports 2023–2025 when those dates are present in a
-  validated release; this guide does not claim that an extended release is published.
+  The GHCNh extension was published for 2023–2025 on November 10; see the dated
+  [release evidence](weather-2023-2025.md). Available dates come from the pinned release,
+  not a hard-coded assumption that the current environment is provisioned.
   Original ISD releases remain January 2025 only, even when flight coverage is broader.
   When filters are outside that weather scope, no KPIs/results appear; the main
   **Align filters to DEN · [available period]** action explicitly selects that scope,

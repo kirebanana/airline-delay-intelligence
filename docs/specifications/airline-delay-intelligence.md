@@ -1,5 +1,11 @@
 # Airline Delay Intelligence — Technical Specification
 
+**Related approved amendments:** [Dashboard presentation](dashboard-product-improvements.md)
+updates navigation/layout; [Denver weather 2023–2025](den-weather-2023-2025.md)
+supersedes the January-only pilot source/scope below. These links identify approved
+deltas; the original approval text is retained. Actual runtime availability is
+separate and tracked in [resource lifecycle](../resource-lifecycle.md).
+
 | Field | Value |
 | --- | --- |
 | Status | **Approved architecture and implementation order; execution remains gated** |

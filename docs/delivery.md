@@ -1,5 +1,19 @@
 # Code delivery and data execution
 
+**Lifecycle update, 2026-11-14:** Protected code delivery is disabled following
+approved infrastructure teardown. The ECR repository, workload/release roles and
+GitHub OIDC provider have been removed. The two AWS-dependent denial-qualification
+workflows are also disabled; credential-free validation is retained.
+Do not re-enable promotion without reprovisioning and reviewing its exact ownership
+and trust boundaries. See [resource lifecycle](resource-lifecycle.md).
+
+Subsequent successful application delivery includes [PR #15](https://github.com/kirebanana/airline-delay-intelligence/pull/15),
+merge `93da73b61818684768007a8a7e232be9a68a3d90`, and protected run
+[42836847074](https://github.com/kirebanana/airline-delay-intelligence/actions/runs/42836847074)
+on November 10. That promotion hardened weather provenance and simplified the UI;
+it did not rebuild or republish data. Earlier version/image qualifications below
+remain dated evidence, not the latest or currently deployed inventory.
+
 **Status: actual GitHub validation, protected OIDC, retained-version overlap,
 rollback and partial-apply recovery exercised, 2026-11-03.** On that date the owner confirmed that
 the repository is intentionally public and authorized verified publication.
