@@ -5,23 +5,31 @@ Snowflake warehouse and an interactive reliability dashboard. Built with **Pytho
 Amazon S3, Snowflake, dbt Core, Streamlit, Terraform, ECS/Fargate and Step Functions**.
 
 The January 2023–December 2025 baseline contains **22,562,477 reported scheduled
-operation rows**, with a fixed **24,732-row Denver/January 2025 weather pilot**.
+operation rows**, with weather context for **930,445 Denver departures across
+2023–2025** using NOAA GHCNh.
 The focus is both useful analysis and a
 reproducible pipeline: preserving source data, handling corrections without double
 counting, and keeping incomplete refreshes out of the dashboard.
 
-**Current milestone (2026-11-03):** The complete 2023–2025 baseline is published
-with all six analytical areas and the DEN weather pilot. Independent source-to-reader
-reconciliation, failure preservation, replay and real-dashboard qualification pass.
-A separate isolated full-module cloud refresh has also succeeded and independently
-reconciled all 36 months and weather; exact-input cloud replay reused that same
-release without rebuilding. Actual protected GitHub promotion, rollback, partial-apply
-recovery and final version-7 replay now pass. Deferred Snowflake adoption and owner
-acceptance remain explicit; known image findings are not hidden.
-See the [acceptance map](docs/acceptance.md), [latest sanitized delivery summary](docs/evidence/delivery-qualification.json), [initial qualification snapshot](docs/evidence/qualification-summary.json), [cloud evidence](docs/cloud-jobs.md),
-[presentation guide](docs/presentation.md), [baseline evidence](docs/baseline.md),
-[category/recovery notes](docs/secondary-analytics.md),
-[weather runbook](docs/weather.md) and [attended local recovery](docs/local-recovery.md).
+The dashboard has four investigations: Network & carriers, Time & routes,
+Disruption & recovery, and DEN weather. Source-to-reader reconciliation, replay,
+controlled corrections and failure recovery have been exercised. The full-period
+Denver extension and provenance fixes are recorded in [weather evidence](docs/weather-2023-2025.md).
+The separately qualified ECS/Step Functions path uses isolated targets and the
+original January ISD weather transport; the newer GHCNh extension was built locally
+using shared pipeline logic. Code delivery does not initiate a data refresh.
+
+**Runtime status (2026-11-14):** Local servers are stopped and AWS execution/image
+resources have been removed under an approved teardown. Some resources remain
+pending owner permissions, including the Snowflake database and suspended warehouse,
+two secrets and the project VPC endpoint. The Terraform state bucket is retained
+until those dependencies are removed. See the exact [resource status](docs/resource-lifecycle.md).
+The repository is not a hosted dashboard or a self-contained copy of its data.
+
+See the [acceptance map](docs/acceptance.md), [delivery evidence](docs/delivery.md),
+[cloud qualification](docs/cloud-jobs.md), [baseline evidence](docs/baseline.md),
+[dashboard guide](docs/dashboard-guide.md) and [architecture walkthrough](docs/presentation.md).
+Recorded security findings and provider-coverage exceptions remain disclosed.
 
 ## Analytics
 
@@ -36,7 +44,7 @@ The dashboard helps investigate questions such as:
 - Which airports and scheduled hours have higher departure-delay rates?
 - How does reliability differ between a route and its reverse direction?
 - How do reported delay allocations and schedule-relative recovery differ?
-- What scheduled weather context accompanies the fixed DEN/January investigation?
+- What scheduled weather context accompanies Denver departures during 2023–2025?
 
 Comparisons include eligible counts and small-group warnings. They describe
 historical performance—not predictions, passenger impact, or proof of causation.
@@ -51,6 +59,8 @@ flowchart TD
     D --> E["dbt staging, dimensions, and flight fact"]
     E --> F["Validate and freeze a release"]
     F -->|"SQL aggregates"| G["Local Streamlit dashboard"]
+    H["NOAA GHCNh · Denver"] --> I["Python QC / held JSONL"]
+    I --> E
 ```
 
 Official [BTS Marketing Carrier On-Time Performance](https://www.transtats.bts.gov/)
@@ -84,6 +94,11 @@ aggregates rather than downloading the full flight dataset.
 Requires **Python 3.12**, [uv](https://docs.astral.sh/uv/), and access to the configured
 Snowflake reader identity and a published release. Data and credentials are not
 included; dashboard queries use Snowflake compute.
+
+The commands below describe application startup, not automatic infrastructure or
+data restoration. The [resource lifecycle status](docs/resource-lifecycle.md) must be
+resolved before using a live environment. Do not apply retained Terraform state or
+re-enable deployment to recreate resources without a reviewed provisioning plan.
 
 ```bash
 uv sync --locked --extra analytics

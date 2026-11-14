@@ -1,4 +1,9 @@
-# Proposed lifecycle and cleanup plan — no deletion authorized
+# Lifecycle and cleanup plan
+
+**2026-11-14 update:** The owner approved bounded teardown. Actions taken, blocked
+resources and protected exclusions are recorded in [resource lifecycle](resource-lifecycle.md).
+The proposal below is retained as dated history; its earlier no-deletion statements
+are not the current authorization or runtime status.
 
 **Status: proposal only, 2026-11-03.** Prepare evidence now; retain infrastructure,
 accepted source data, warehouse data and releases until the owner approves exact

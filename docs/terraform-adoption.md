@@ -1,5 +1,14 @@
 # Terraform adoption and finite-job preparation
 
+**Reading guide, updated 2026-11-14:** This is dated adoption history, not a current
+resource inventory. All three SERVICE-user imports subsequently completed on
+November 4; the official normal plan covered fifteen Snowflake instances, with
+account-monitor attachment and refresh-only metadata exceptions recorded in
+[adoption outcome](snowflake-adoption-gap.md). Approved teardown has since removed
+AWS resources outside Terraform; [resource lifecycle](resource-lifecycle.md) records
+the remaining dependencies. The remote state is retained for reconciliation, not a
+clean current plan. Do not apply it to recreate the removed stack.
+
 **Status: reviewed AWS platform apply complete, 2026-11-02.** The12Snowflake
 imports completed with no resource changes and a clean subsequent plan. After
 the initial AWS partial apply, the owner attached the exact state policy, which

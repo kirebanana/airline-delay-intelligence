@@ -1,9 +1,10 @@
 # Airline Delay Intelligence — presentation guide
 
-**Status: prepared for the owner walkthrough; final platform acceptance pending.**
-No cleanup, credential retirement or infrastructure deletion is authorized by this
-document. The working application requires Snowflake; preserved evidence is not an
-offline replacement warehouse or dashboard.
+**Architecture walkthrough, updated 2026-11-14.** Explain the implemented design
+using diagrams and dated evidence. The [resource lifecycle](resource-lifecycle.md)
+records removed infrastructure and remaining owner actions; live console links and
+dashboard availability must not be assumed. Preserved evidence is not an offline
+replacement warehouse or dashboard.
 
 Use the [latest sanitized delivery summary](evidence/delivery-qualification.json)
 and [initial data/recovery snapshot](evidence/qualification-summary.json) for dated
@@ -16,7 +17,16 @@ instances, zero object changes, official-plugin normal plan clean. Read-only acc
 monitor verification passed. Disclose the unsupported attachment coverage and the
 refresh-only last-login metadata exception; neither is silently waived.
 
-## The story in ten minutes
+## Diagram-led walkthrough
+
+Use the diagram as the main screen. Briefly show Snowflake's database/schema
+organization or the fact/dimension model, then return to the architecture. When an
+authorized live environment exists, demonstrate one overview KPI and a period
+filter, then one weather-band rate. Otherwise use clearly dated, sanitized evidence.
+There is no need to tour every console or dashboard section. GitHub/AWS browsing is
+optional; never start new processing merely to demonstrate the graph.
+
+Suggested topics, shortened or expanded to match the audience:
 
 1. **Question and scope (one minute).** Explain historical airline reliability,
    not prediction or causation. Coverage is January 2023–December 2025: 36 months,
@@ -26,16 +36,17 @@ refresh-only last-login metadata exception; neither is silently waived.
    prepared gzip, accepted RAW identity, selected monthly map, dbt candidate and
    frozen release. Show why repacked preparation and source corrections have
    separate identities. See [ingestion](ingestion.md) and [baseline](baseline.md).
-3. **Dashboard (three minutes).** Open the existing local dashboard, show the pinned
-   release and historical coverage, filter carrier/date/origin, compare opposite
-   route directions, then reset. Show rates with eligible counts, signed delay
-   mean/median/p90, reported category minutes and recovery. Explain why subgroup
-   percentages and percentiles cannot simply be averaged.
-4. **Weather (one minute).** Drill into fixed DEN/local-January 2025. All 24,732
-   scheduled rows, including 313 cancellations and 69 diversions, remain in the
-   denominator. Temperature/wind/visibility match independently backward by at most
-   60 minutes. Show coverage and date concentration, not a causal weather effect.
-   See [weather](weather.md).
+3. **Dashboard.** Introduce the four investigations: Network & carriers, Time &
+   routes, Disruption & recovery, and DEN weather. Snowflake computes filtered SQL
+   aggregates and Streamlit displays them; cached results can be reused, so every
+   click is not necessarily fresh compute. See [dashboard guide](dashboard-guide.md).
+4. **Weather.** The published GHCNh extension covers 930,445 DEN schedules throughout
+   2023–2025, including cancellations and diversions. Temperature/wind/visibility
+   independently match backward by at most 60 minutes. Show one compact comparison
+   and matching-coverage caption, not a causal weather effect. Airport/station
+   identity and source quality need airport-specific validation; coverage is Denver
+   only. The earlier January ISD pilot remains historical evidence, not the latest
+   weather scope. See [full-period evidence](weather-2023-2025.md).
 5. **Failure safety (two minutes).** Explain the lock-first control transaction,
    immutable frozen data, single pinned reader descriptor and retained previous
    release. Contrast a failed required stage with a committed publication whose
@@ -51,9 +62,9 @@ refresh-only last-login metadata exception; neither is silently waived.
 ```mermaid
 flowchart LR
     BTS[Official BTS archives] --> Prep[Python import and deterministic preparation]
-    NOAA[Bounded fixed DEN ISD inputs] --> WX[Weather decoding and provenance]
+    NOAA[DEN GHCNh inputs] --> WX[Python QC and trusted held JSONL]
     Prep --> S3[Private immutable S3 artifacts and manifests]
-    WX --> S3
+    WX --> Build
     S3 --> Acq[Finite acquisition: verify selected accepted artifacts]
     Acq --> Build[Finite warehouse job: external-stage load, dbt, validation]
     Build --> Candidate[Sealed isolated candidate]
@@ -65,6 +76,13 @@ flowchart LR
     SF -. coordinates .-> Build
     SF -. coordinates .-> Pub
 ```
+
+The solid graph is the logical data path. The current GHCNh extension used local
+execution of shared build/publication code. The qualified cloud adapter admits
+isolated targets and the original ISD transport, not the full-period GHCNh payload.
+Publisher admission precedes acquisition; exact-input replay can exit early without
+another build. Fargate tasks have outbound public IPs and no inbound service; this
+is not a fully private-subnet/PrivateLink architecture.
 
 ## Trust and deployment diagram
 
@@ -84,7 +102,9 @@ flowchart TD
 
 The trusted-promotion/OIDC path was qualified through the actual protected release
 workflow; [delivery evidence](delivery.md) records allowed/denied trust, promotion,
-overlap and rollback/recovery. The diagram alone is not the evidence.
+overlap and rollback/recovery. That delivery is now disabled and its runtime
+dependencies removed as recorded in resource lifecycle. The diagram alone is not
+the evidence or current cloud inventory.
 
 ## Preserve before trial expiry
 
@@ -111,7 +131,7 @@ evidence outside Git; only reviewed summaries and presentation material belong h
 - Why does task termination not prove SQL/transaction termination?
 - What happens if publication commits but the workflow later fails?
 - Which identities can load, publish, read, deploy and recover—and which cannot?
-- What remains after cleanup is proposed but not approved?
+- Which resources remain after teardown, and what owner permissions are required?
 
 The [cleanup plan](cleanup-plan.md) inventories retained responsibilities and gates.
 The [cloud qualification status](cloud-jobs.md) records current implementation
